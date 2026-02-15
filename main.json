@@ -1,0 +1,494 @@
+import React, { useState, useMemo } from 'react';
+import { 
+  LayoutDashboard, 
+  ArrowUpRight, 
+  ArrowDownLeft, 
+  Plus, 
+  Filter, 
+  PieChart as PieChartIcon, 
+  Download, 
+  Search, 
+  X, 
+  ChevronRight,
+  CreditCard,
+  Tag,
+  Calendar,
+  MoreVertical,
+  CheckCircle2,
+  Wallet,
+  ArrowRightLeft,
+  RefreshCw,
+  Building2,
+  SmartphoneNfc,
+  Bell,
+  Settings,
+  TrendingUp,
+  User,
+  ExternalLink
+} from 'lucide-react';
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer, 
+  PieChart, 
+  Pie, 
+  Cell,
+  AreaChart,
+  Area
+} from 'recharts';
+
+// --- Constants & Mock Data ---
+
+const CATEGORIES = [
+  'Revenue', 'Marketing', 'Software', 'Rent', 'Utilities', 'Payroll', 'Travel', 'Miscellaneous'
+];
+
+const INITIAL_TRANSACTIONS = [
+  { id: '1', date: '2023-10-15', description: 'Stripe Payout', amount: 4500.00, type: 'deposit', category: 'Revenue', label: 'Main Product', status: 'completed' },
+  { id: '2', date: '2023-10-15', description: 'Google Ads', amount: -250.00, type: 'withdrawal', category: 'Marketing', label: 'AdWords', status: 'completed' },
+  { id: '3', date: '2023-10-14', description: 'AWS Cloud Services', amount: -120.50, type: 'withdrawal', category: 'Software', label: 'Infrastructure', status: 'completed' },
+  { id: '4', date: '2023-10-14', description: 'Office Rent', amount: -1500.00, type: 'withdrawal', category: 'Rent', label: 'Q4 Rent', status: 'completed' },
+  { id: '5', date: '2023-10-13', description: 'Client Project B', amount: 2200.00, type: 'deposit', category: 'Revenue', label: 'Consulting', status: 'completed' },
+  { id: '6', date: '2023-10-10', description: 'Adobe Creative Cloud', amount: -52.99, type: 'withdrawal', category: 'Software', label: 'Design', status: 'completed' },
+  { id: '7', date: '2023-10-10', description: 'Starbucks Business Meet', amount: -18.40, type: 'withdrawal', category: 'Travel', label: 'Networking', status: 'completed' },
+];
+
+const INITIAL_ACCOUNTS = [
+  { id: 'acc1', name: 'Venmo', balance: 450.25, type: 'Wallet', icon: <SmartphoneNfc />, lastSync: '2 mins ago', color: 'bg-blue-500' },
+  { id: 'acc2', name: 'PayPal', balance: 1280.50, type: 'Wallet', icon: <Wallet />, lastSync: '1 hour ago', color: 'bg-indigo-600' },
+  { id: 'acc3', name: 'Cash App', balance: 120.00, type: 'Wallet', icon: <ArrowRightLeft />, lastSync: 'Just now', color: 'bg-green-500' },
+  { id: 'acc4', name: 'Chime', balance: 2100.00, type: 'Banking', icon: <Building2 />, lastSync: '12 hours ago', color: 'bg-emerald-400' },
+];
+
+const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#71717a'];
+
+// --- Helper Components ---
+
+const Modal = ({ isOpen, onClose, title, children }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="p-5 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center">
+          <h3 className="text-xl font-bold">{title}</h3>
+          <button onClick={onClose} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors">
+            <X size={20} />
+          </button>
+        </div>
+        <div className="p-6 max-h-[80vh] overflow-y-auto">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default function App() {
+  const [activeTab, setActiveTab] = useState('transactions');
+  const [transactions, setTransactions] = useState(INITIAL_TRANSACTIONS);
+  const [accounts] = useState(INITIAL_ACCOUNTS);
+  const [savingsBalance] = useState(12450.75);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState('all');
+  const [isAddingTransaction, setIsAddingTransaction] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState(null);
+
+  const [newTx, setNewTx] = useState({
+    description: '',
+    amount: '',
+    date: new Date().toISOString().split('T')[0],
+    category: 'Miscellaneous',
+    label: ''
+  });
+
+  const stats = useMemo(() => {
+    const income = transactions.filter(t => t.type === 'deposit').reduce((acc, t) => acc + t.amount, 0);
+    const expenses = transactions.filter(t => t.type === 'withdrawal').reduce((acc, t) => acc + Math.abs(t.amount), 0);
+    return { income, expenses, balance: income - expenses };
+  }, [transactions]);
+
+  const groupedTransactions = useMemo(() => {
+    const filtered = transactions.filter(t => {
+      const matchesSearch = t.description.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                            t.label.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesType = filterType === 'all' || t.type === filterType;
+      return matchesSearch && matchesType;
+    }).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    const groups = {};
+    filtered.forEach(t => {
+      if (!groups[t.date]) groups[t.date] = [];
+      groups[t.date].push(t);
+    });
+    return groups;
+  }, [transactions, searchQuery, filterType]);
+
+  const reportData = useMemo(() => {
+    const categoryTotals = {};
+    transactions.forEach(t => {
+      const amount = Math.abs(t.amount);
+      categoryTotals[t.category] = (categoryTotals[t.category] || 0) + amount;
+    });
+    return Object.entries(categoryTotals).map(([name, value]) => ({ name, value }));
+  }, [transactions]);
+
+  const handleAddTransaction = (e) => {
+    e.preventDefault();
+    const amountNum = parseFloat(newTx.amount);
+    const type = amountNum >= 0 ? 'deposit' : 'withdrawal';
+    const transaction = { id: Date.now().toString(), ...newTx, amount: amountNum, type, status: 'completed' };
+    setTransactions([transaction, ...transactions]);
+    setIsAddingTransaction(false);
+    setNewTx({ description: '', amount: '', date: new Date().toISOString().split('T')[0], category: 'Miscellaneous', label: '' });
+  };
+
+  return (
+    <div className="min-h-screen bg-[#F8F9FC] dark:bg-black text-zinc-900 dark:text-zinc-100 font-sans">
+      {/* Sidebar Navigation */}
+      <aside className="fixed bottom-0 left-0 w-full h-16 bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 md:top-0 md:h-full md:w-64 md:border-t-0 md:border-r z-40">
+        <div className="flex flex-row md:flex-col h-full p-2 md:p-6 gap-2">
+          <div className="hidden md:flex items-center gap-3 mb-10 px-2">
+            <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-500/30">
+              <TrendingUp size={22} />
+            </div>
+            <span className="font-black text-xl tracking-tight">FinanceFlow</span>
+          </div>
+
+          <nav className="flex flex-row md:flex-col flex-1 gap-1 w-full justify-around md:justify-start">
+            <button onClick={() => setActiveTab('transactions')} className={`flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ${activeTab === 'transactions' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}>
+              <LayoutDashboard size={20} />
+              <span className="font-bold hidden md:inline">Dashboard</span>
+            </button>
+            <button onClick={() => setActiveTab('accounts')} className={`flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ${activeTab === 'accounts' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}>
+              <Wallet size={20} />
+              <span className="font-bold hidden md:inline">Accounts</span>
+            </button>
+            <button onClick={() => setActiveTab('reports')} className={`flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ${activeTab === 'reports' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}>
+              <PieChartIcon size={20} />
+              <span className="font-bold hidden md:inline">Reports</span>
+            </button>
+          </nav>
+          
+          <div className="hidden md:block mt-auto p-4 bg-indigo-50 dark:bg-indigo-900/10 rounded-3xl border border-indigo-100 dark:border-indigo-900/20">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-indigo-200 dark:bg-indigo-800 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold">JD</div>
+              <div>
+                <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400">Premium Plan</p>
+                <p className="text-sm font-black">Jane Doe</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="pb-24 md:pb-8 md:pl-64">
+        {/* Top Branding Bar */}
+        <header className="sticky top-0 bg-[#F8F9FC]/80 dark:bg-black/80 backdrop-blur-md z-30 px-4 md:px-10 py-6">
+          <div className="max-w-6xl mx-auto flex items-center justify-between">
+            <div>
+              <p className="text-sm font-bold text-zinc-400 uppercase tracking-widest">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+              <h1 className="text-2xl md:text-3xl font-black tracking-tight">Good morning, Jane 👋</h1>
+            </div>
+            <div className="flex items-center gap-3">
+              <button className="p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl text-zinc-500 hover:text-indigo-600 transition-colors shadow-sm">
+                <Bell size={20} />
+              </button>
+              <button className="p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl text-zinc-500 hover:text-indigo-600 transition-colors shadow-sm">
+                <Settings size={20} />
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <div className="max-w-6xl mx-auto px-4 md:px-10 space-y-8 mt-2">
+          
+          {/* Visual Highlight Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-gradient-to-br from-indigo-600 to-indigo-700 p-8 rounded-[2rem] text-white shadow-2xl shadow-indigo-500/40 relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-8 opacity-20">
+                <CreditCard size={120} />
+              </div>
+              <div className="relative z-10">
+                <div className="flex items-center gap-2 mb-8">
+                  <span className="px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-widest">Business Checking</span>
+                  <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></div>
+                </div>
+                <p className="text-indigo-100 font-medium mb-1">Available Balance</p>
+                <h2 className="text-4xl md:text-5xl font-black mb-6 tracking-tighter">${stats.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</h2>
+                <div className="flex items-center gap-4">
+                  <button className="bg-white text-indigo-600 px-6 py-2.5 rounded-xl font-bold text-sm hover:scale-105 transition-transform active:scale-95">Send Money</button>
+                  <button className="bg-indigo-500/30 backdrop-blur-md text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-indigo-500/50 transition-colors">Details</button>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-zinc-900 p-8 rounded-[2rem] border border-zinc-100 dark:border-zinc-800 shadow-xl shadow-zinc-200/50 dark:shadow-none flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-8">
+                  <span className="px-3 py-1 bg-zinc-100 dark:bg-zinc-800 rounded-full text-[10px] font-black uppercase tracking-widest text-zinc-500">Growth Savings</span>
+                  <TrendingUp size={20} className="text-green-500" />
+                </div>
+                <p className="text-zinc-500 font-medium mb-1">Total Savings</p>
+                <h2 className="text-4xl md:text-5xl font-black tracking-tighter">${savingsBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</h2>
+              </div>
+              <div className="flex items-center justify-between mt-8 p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl border border-zinc-100 dark:border-zinc-800">
+                <div>
+                  <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Auto-Deposit</p>
+                  <p className="text-sm font-bold">Active • $200/mo</p>
+                </div>
+                <button className="text-indigo-600 dark:text-indigo-400 font-bold text-sm flex items-center gap-1">Manage <ChevronRight size={16} /></button>
+              </div>
+            </div>
+          </div>
+
+          {activeTab === 'transactions' && (
+            <div className="space-y-6">
+              {/* Secondary Stats & Actions */}
+              <div className="flex flex-col md:flex-row gap-6">
+                <div className="flex-1 grid grid-cols-2 gap-4">
+                  <div className="bg-white dark:bg-zinc-900 p-5 rounded-3xl border border-zinc-100 dark:border-zinc-800 shadow-sm flex items-center gap-4">
+                    <div className="w-10 h-10 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-2xl flex items-center justify-center"><ArrowDownLeft size={20} /></div>
+                    <div>
+                      <p className="text-xs font-bold text-zinc-400 uppercase">Inflow</p>
+                      <p className="font-black text-lg text-green-600">+${stats.income.toLocaleString()}</p>
+                    </div>
+                  </div>
+                  <div className="bg-white dark:bg-zinc-900 p-5 rounded-3xl border border-zinc-100 dark:border-zinc-800 shadow-sm flex items-center gap-4">
+                    <div className="w-10 h-10 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-2xl flex items-center justify-center"><ArrowUpRight size={20} /></div>
+                    <div>
+                      <p className="text-xs font-bold text-zinc-400 uppercase">Outflow</p>
+                      <p className="font-black text-lg text-red-600">-${stats.expenses.toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex gap-3">
+                  <button onClick={() => setIsAddingTransaction(true)} className="flex-1 md:flex-none flex items-center justify-center gap-3 bg-zinc-900 dark:bg-white text-white dark:text-black px-8 py-4 rounded-3xl font-black shadow-2xl hover:scale-105 transition-all active:scale-95">
+                    <Plus size={20} /> New Entry
+                  </button>
+                </div>
+              </div>
+
+              {/* Feed Controls */}
+              <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+                <h3 className="text-xl font-black self-start">Recent Activity</h3>
+                <div className="flex w-full md:w-auto gap-2">
+                  <div className="relative flex-1 md:w-64">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={16} />
+                    <input type="text" placeholder="Search..." className="w-full pl-10 pr-4 py-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl focus:ring-2 focus:ring-indigo-500/20 outline-none text-sm font-medium" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                  </div>
+                  <button className="p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl text-zinc-500 hover:text-indigo-600 transition-colors"><Filter size={18} /></button>
+                </div>
+              </div>
+
+              {/* Grouped Transaction Feed */}
+              <div className="space-y-6">
+                {Object.keys(groupedTransactions).length === 0 ? (
+                  <div className="p-20 text-center bg-white dark:bg-zinc-900 rounded-[2rem] border-2 border-dashed border-zinc-200 dark:border-zinc-800">
+                    <div className="w-20 h-20 bg-zinc-50 dark:bg-zinc-800 rounded-full flex items-center justify-center mx-auto text-zinc-400 mb-4"><Search size={40} /></div>
+                    <h3 className="text-xl font-black">Nothing found</h3>
+                    <p className="text-zinc-500">No transactions match your current search.</p>
+                  </div>
+                ) : (
+                  Object.entries(groupedTransactions).map(([date, txs]) => (
+                    <div key={date} className="space-y-3">
+                      <p className="text-xs font-black text-zinc-400 uppercase tracking-widest ml-2">
+                        {new Date(date).toLocaleDateString() === new Date().toLocaleDateString() ? 'Today' : 
+                         new Date(date).toLocaleDateString() === new Date(Date.now() - 86400000).toLocaleDateString() ? 'Yesterday' :
+                         new Date(date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                      </p>
+                      <div className="bg-white dark:bg-zinc-900 rounded-[2rem] border border-zinc-100 dark:border-zinc-800 overflow-hidden shadow-sm divide-y divide-zinc-50 dark:divide-zinc-800">
+                        {txs.map(t => (
+                          <div key={t.id} onClick={() => setEditingTransaction(t)} className="flex items-center justify-between p-5 md:p-6 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer transition-colors group">
+                            <div className="flex items-center gap-5">
+                              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${t.type === 'deposit' ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'}`}>
+                                {t.type === 'deposit' ? <ArrowDownLeft size={24} /> : <ArrowUpRight size={24} />}
+                              </div>
+                              <div>
+                                <p className="font-bold text-lg leading-tight group-hover:text-indigo-600 transition-colors">{t.description}</p>
+                                <div className="flex items-center gap-2 mt-1.5">
+                                  <span className="text-[10px] px-2 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded-md text-zinc-500 font-black uppercase tracking-widest">{t.category}</span>
+                                  {t.label && <span className="text-[10px] font-bold text-indigo-500 dark:text-indigo-400">#{t.label}</span>}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className={`text-xl font-black ${t.type === 'deposit' ? 'text-green-600' : 'text-zinc-900 dark:text-white'}`}>
+                                {t.type === 'deposit' ? '+' : ''}${Math.abs(t.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              </p>
+                              <p className="text-[10px] font-black text-zinc-400 uppercase mt-1 tracking-widest group-hover:text-indigo-600 transition-colors">Details <ChevronRight size={10} className="inline" /></p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'accounts' && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {accounts.map(account => (
+                  <div key={account.id} className="bg-white dark:bg-zinc-900 p-8 rounded-[2.5rem] border border-zinc-100 dark:border-zinc-800 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
+                       {React.cloneElement(account.icon, { size: 100 })}
+                    </div>
+                    <div className="flex items-center gap-4 mb-8">
+                      <div className={`w-14 h-14 ${account.color} rounded-2xl flex items-center justify-center text-white shadow-lg`}>
+                        {React.cloneElement(account.icon, { size: 28 })}
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-black leading-none">{account.name}</h3>
+                        <span className="text-[10px] uppercase font-black text-zinc-400 tracking-widest">{account.type}</span>
+                      </div>
+                    </div>
+                    <p className="text-3xl font-black tracking-tighter mb-6">${account.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                    <div className="flex items-center justify-between pt-6 border-t border-zinc-50 dark:border-zinc-800">
+                      <span className="text-[10px] font-bold text-zinc-400">Last updated {account.lastSync}</span>
+                      <button className="p-2 bg-zinc-50 dark:bg-zinc-800 rounded-xl text-zinc-400 hover:text-indigo-600 transition-colors">
+                        <RefreshCw size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <button className="bg-zinc-50 dark:bg-zinc-900/50 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] flex flex-col items-center justify-center p-10 text-zinc-400 hover:border-indigo-500/50 hover:text-indigo-500 transition-all gap-4 group">
+                  <div className="w-16 h-16 bg-white dark:bg-zinc-800 rounded-3xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+                    <Plus size={32} />
+                  </div>
+                  <span className="font-black text-lg">Link External Account</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'reports' && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="bg-white dark:bg-zinc-900 p-10 rounded-[2.5rem] border border-zinc-100 dark:border-zinc-800 shadow-sm">
+                  <h3 className="text-xl font-black mb-8 flex items-center gap-3">
+                    <PieChartIcon size={24} className="text-indigo-600" />
+                    Spending Matrix
+                  </h3>
+                  <div className="h-[300px] w-full mb-8">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={reportData} innerRadius={80} outerRadius={110} paddingAngle={8} dataKey="value" stroke="none">
+                          {reportData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} cornerRadius={8} />)}
+                        </Pie>
+                        <Tooltip contentStyle={{ backgroundColor: '#18181b', borderRadius: '20px', border: 'none', color: '#fff', padding: '12px' }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="grid grid-cols-2 gap-6">
+                    {reportData.map((item, index) => (
+                      <div key={item.name} className="flex items-center justify-between p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl">
+                        <div className="flex items-center gap-3">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
+                          <span className="text-xs font-bold text-zinc-500">{item.name}</span>
+                        </div>
+                        <span className="text-xs font-black">${item.value.toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-white dark:bg-zinc-900 p-10 rounded-[2.5rem] border border-zinc-100 dark:border-zinc-800 shadow-sm">
+                  <h3 className="text-xl font-black mb-8 flex items-center gap-3">
+                    <TrendingUp size={24} className="text-green-500" />
+                    Cash Flow Analysis
+                  </h3>
+                  <div className="h-[350px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={reportData}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700 }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700 }} />
+                        <Tooltip cursor={{ fill: '#f8f9fa' }} contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} />
+                        <Bar dataKey="value" fill="#6366f1" radius={[10, 10, 10, 10]} barSize={40} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* Modals are unchanged in logic but enhanced in UI (see Modal helper) */}
+      <Modal isOpen={isAddingTransaction} onClose={() => setIsAddingTransaction(false)} title="New Transaction">
+        <form onSubmit={handleAddTransaction} className="space-y-5">
+          <div className="space-y-2">
+            <label className="text-xs font-black text-zinc-400 uppercase tracking-widest ml-1">Payee / Description</label>
+            <input required type="text" className="w-full p-4 bg-zinc-100 dark:bg-zinc-800 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold" placeholder="Who did you pay or get paid by?" value={newTx.description} onChange={(e) => setNewTx({...newTx, description: e.target.value})} />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+             <div className="space-y-2">
+               <label className="text-xs font-black text-zinc-400 uppercase tracking-widest ml-1">Amount</label>
+               <input required type="number" step="0.01" className="w-full p-4 bg-zinc-100 dark:bg-zinc-800 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold" placeholder="0.00" value={newTx.amount} onChange={(e) => setNewTx({...newTx, amount: e.target.value})} />
+             </div>
+             <div className="space-y-2">
+               <label className="text-xs font-black text-zinc-400 uppercase tracking-widest ml-1">Date</label>
+               <input required type="date" className="w-full p-4 bg-zinc-100 dark:bg-zinc-800 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={newTx.date} onChange={(e) => setNewTx({...newTx, date: e.target.value})} />
+             </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+             <div className="space-y-2">
+               <label className="text-xs font-black text-zinc-400 uppercase tracking-widest ml-1">Category</label>
+               <select className="w-full p-4 bg-zinc-100 dark:bg-zinc-800 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold appearance-none" value={newTx.category} onChange={(e) => setNewTx({...newTx, category: e.target.value})}>
+                 {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+               </select>
+             </div>
+             <div className="space-y-2">
+               <label className="text-xs font-black text-zinc-400 uppercase tracking-widest ml-1">Label</label>
+               <input type="text" className="w-full p-4 bg-zinc-100 dark:bg-zinc-800 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold" placeholder="#tag" value={newTx.label} onChange={(e) => setNewTx({...newTx, label: e.target.value})} />
+             </div>
+          </div>
+          <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-5 rounded-[1.5rem] shadow-xl shadow-indigo-500/30 mt-4 transition-all active:scale-95">Record Transaction</button>
+        </form>
+      </Modal>
+
+      {/* Floating Plus Button (Mobile) */}
+      <button onClick={() => setIsAddingTransaction(true)} className="fixed bottom-24 right-6 md:hidden w-16 h-16 bg-zinc-900 dark:bg-white text-white dark:text-black rounded-full flex items-center justify-center shadow-2xl z-50 active:scale-90 transition-transform">
+        <Plus size={28} />
+      </button>
+
+      {/* Edit Modal (Logic placeholder) */}
+      <Modal isOpen={!!editingTransaction} onClose={() => setEditingTransaction(null)} title="Update Entry">
+        {editingTransaction && (
+           <form onSubmit={(e) => { e.preventDefault(); setTransactions(transactions.map(t => t.id === editingTransaction.id ? editingTransaction : t)); setEditingTransaction(null); }} className="space-y-5">
+              <div className="space-y-2">
+                <label className="text-xs font-black text-zinc-400 uppercase tracking-widest ml-1">Description</label>
+                <input required type="text" className="w-full p-4 bg-zinc-100 dark:bg-zinc-800 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={editingTransaction.description} onChange={(e) => setEditingTransaction({...editingTransaction, description: e.target.value})} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                 <div className="space-y-2">
+                   <label className="text-xs font-black text-zinc-400 uppercase tracking-widest ml-1">Category</label>
+                   <select className="w-full p-4 bg-zinc-100 dark:bg-zinc-800 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={editingTransaction.category} onChange={(e) => setEditingTransaction({...editingTransaction, category: e.target.value})}>
+                     {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                   </select>
+                 </div>
+                 <div className="space-y-2">
+                   <label className="text-xs font-black text-zinc-400 uppercase tracking-widest ml-1">Label</label>
+                   <input type="text" className="w-full p-4 bg-zinc-100 dark:bg-zinc-800 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold" value={editingTransaction.label} onChange={(e) => setEditingTransaction({...editingTransaction, label: e.target.value})} />
+                 </div>
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button type="button" onClick={() => { setTransactions(transactions.filter(t => t.id !== editingTransaction.id)); setEditingTransaction(null); }} className="flex-1 bg-red-50 text-red-600 font-black py-5 rounded-[1.5rem] hover:bg-red-100 transition-colors">Delete</button>
+                <button type="submit" className="flex-[2] bg-zinc-900 dark:bg-white text-white dark:text-black font-black py-5 rounded-[1.5rem] shadow-xl transition-all active:scale-95">Save Changes</button>
+              </div>
+           </form>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
