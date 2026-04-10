@@ -189,11 +189,24 @@ async def generate_ai_section(
             f"Financial summary: {summary}\n"
             f"Transaction samples: {sample_transactions[:12]}"
         )
-        response = client_gemini.models.generate_content(
-            model=gemini_model,
-            contents=prompt_payload,
-        )
-        return response.text or ""
+
+        candidate_models = [gemini_model, "gemini-2.5-flash", "gemini-1.5-flash"]
+        tried = set()
+        for model_name in candidate_models:
+            if not model_name or model_name in tried:
+                continue
+            tried.add(model_name)
+            try:
+                response = client_gemini.models.generate_content(
+                    model=model_name,
+                    contents=prompt_payload,
+                )
+                if response.text:
+                    return response.text
+            except Exception as model_error:  # pragma: no cover - external API fallback
+                logger.warning("Gemini model %s failed: %s", model_name, model_error)
+
+        return ""
     except Exception as error:  # pragma: no cover - external API fallback
         logger.warning("Gemini generation failed: %s", error)
         return ""

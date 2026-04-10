@@ -44,6 +44,7 @@ Build a fully functional money management system where I can connect my banks an
 - Implemented PDF export endpoint and frontend download flow
 - Added seed demo credentials and documented them in `/app/memory/test_credentials.md`
 - Added comprehensive `data-testid` coverage across interactive and critical UI elements
+- Activated user-provided Gemini API key and validated AI-powered custom insights in generated reports
 
 ## Prioritized Backlog
 ### P0 (Critical to complete fully live integrations)
