@@ -1,0 +1,137 @@
+{
+  "theme": "light",
+  "archetype": "1_organic_and_earthy",
+  "brand": {
+    "name": "Aura Finance",
+    "description": "A mindful, calm, and highly functional cash management tool for multi-platform modern banking.",
+    "emotional_tone": "Grounded, reliable, anti-anxiety, clear."
+  },
+  "typography": {
+    "primary_font_url": "https://fonts.googleapis.com/css2?family=Cabinet+Grotesk:wght@300;400;500;700;800;900&display=swap",
+    "secondary_font_url": "https://fonts.googleapis.com/css2?family=Work+Sans:wght@300;400;500;600&display=swap",
+    "headings": {
+      "family": "'Cabinet Grotesk', sans-serif",
+      "weight_strategy": "Radical contrast: Black (900) for hero numbers, Medium (500) for standard headers.",
+      "letter_spacing": "tracking-tight",
+      "h1": "text-4xl sm:text-5xl lg:text-6xl tracking-tight leading-none",
+      "h2": "text-2xl sm:text-3xl lg:text-4xl tracking-tight leading-none",
+      "h3": "text-xl sm:text-2xl tracking-tight",
+      "h4": "text-lg sm:text-xl font-medium"
+    },
+    "body": {
+      "family": "'Work Sans', sans-serif",
+      "size": "text-base",
+      "line_height": "leading-relaxed"
+    },
+    "labels": {
+      "style": "uppercase text-xs tracking-[0.2em] font-medium text-stone-500"
+    }
+  },
+  "colors": {
+    "background": {
+      "base": "#FDFBF7", 
+      "surface": "#FFFFFF",
+      "surface_alt": "#F3F0EA"
+    },
+    "primary": {
+      "default": "#4A6741", 
+      "hover": "#3D5636",
+      "foreground": "#FFFFFF"
+    },
+    "accent": {
+      "terracotta": "#C75D40",
+      "terracotta_hover": "#A84C32",
+      "sand": "#E6DCCA"
+    },
+    "text": {
+      "primary": "#1C1B1A",
+      "secondary": "#57534E",
+      "muted": "#A8A29E"
+    },
+    "border": {
+      "default": "#E7E5E4",
+      "focus": "#4A6741"
+    },
+    "status": {
+      "success": "#4A6741",
+      "warning": "#D97706",
+      "danger": "#DC2626",
+      "info": "#2563EB"
+    }
+  },
+  "spacing_and_layout": {
+    "philosophy": "Generous Spacing Philosophy. Use 2-3x more spacing. Elements must breathe.",
+    "container_padding": "p-6 md:p-8 lg:p-12",
+    "grid_strategy": "Control Room Mode for Dashboards. grid-cols-1 md:grid-cols-3 lg:grid-cols-4 with gap-6. Every pixel must be utilized with tight correlation. Direct children ONLY in grids.",
+    "radius": "rounded-lg max-w-[8px] for subtle modern touch. No pill shapes except specific tags.",
+    "alignment": "Optical alignment over geometrical. Left-align dense content and forms."
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-[#4A6741] text-white hover:bg-[#3D5636] transition-transform hover:-translate-y-0.5 shadow-sm rounded-lg px-6 py-3 font-medium",
+      "secondary": "bg-transparent border border-[#E7E5E4] text-[#1C1B1A] hover:bg-[#F3F0EA] transition-colors rounded-lg px-6 py-3 font-medium",
+      "icon_button": "p-2 rounded-md hover:bg-[#F3F0EA] text-[#57534E] transition-colors"
+    },
+    "cards": {
+      "default": "bg-white border border-[#E7E5E4] rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow",
+      "interactive": "bg-white border border-[#E7E5E4] rounded-lg p-6 hover:-translate-y-1 hover:border-[#4A6741]/50 hover:shadow-lg transition-all duration-200 cursor-pointer",
+      "ai_prompt_panel": "relative bg-[#FDFBF7] border-2 border-[#E6DCCA] rounded-lg p-6 focus-within:border-[#4A6741] focus-within:ring-4 focus-within:ring-[#4A6741]/10 transition-all"
+    },
+    "inputs": {
+      "default": "w-full bg-white border border-[#E7E5E4] rounded-md px-4 py-2 text-[#1C1B1A] focus:outline-none focus:ring-2 focus:ring-[#4A6741]/20 focus:border-[#4A6741] transition-all",
+      "textarea": "w-full bg-white border border-[#E7E5E4] rounded-md px-4 py-3 min-h-[120px] resize-y focus:outline-none focus:ring-2 focus:ring-[#4A6741]/20 focus:border-[#4A6741]"
+    },
+    "navigation": {
+      "style": "Sticky top nav, bg-white/80 backdrop-blur-xl border-b border-[#E7E5E4] z-50",
+      "links": "text-[#57534E] hover:text-[#1C1B1A] font-medium text-sm transition-colors"
+    }
+  },
+  "motion_and_interactions": {
+    "hover_states": "All interactive elements MUST have visible hover states altering background, border, or transform. Contrast MUST increase on hover.",
+    "transitions": "Use specific properties: transition: transform 0.2s ease, opacity 0.2s ease, border-color 0.2s ease. No 'all'.",
+    "entrance_animations": "Staggered fade-up for transaction lists (framer-motion, y: 10, opacity: 0).",
+    "ai_generation": "When AI is generating the report, use 'The Tracing Beam' border effect (animated glowing gradient border) or a subtle pulsating glow around the AI panel."
+  },
+  "icons_and_assets": {
+    "library": "@phosphor-icons/react",
+    "installation_command": "yarn add @phosphor-icons/react",
+    "style": "Duotone or Regular weight, strictly matching text colors."
+  },
+  "media": {
+    "hero_background": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/522d1ae5-e3a1-4a99-90c4-276bd1db41d5/images/3067d5d0c23655b3bd7934e2b86bf899036a2fd224dc234b027724f3ae1d11e2.png",
+      "description": "Abstract earthy 3D composition representing financial stability.",
+      "usage": "Auth page split background, or extremely subtle faded background for the landing page hero section."
+    },
+    "receipt_lifestyle": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/522d1ae5-e3a1-4a99-90c4-276bd1db41d5/images/67c8a0f60eb38c5df8bf961ee4035864f363e8ff1edfb3c836a5eb4691ff0ef6.png",
+      "description": "Minimalist desk flat lay with warm stone texture and receipts.",
+      "usage": "Can be used as an illustration in empty states (e.g., 'No transactions yet') or report generator marketing."
+    },
+    "provider_logos": {
+      "venmo": "https://static.prod-images.emergentagent.com/jobs/522d1ae5-e3a1-4a99-90c4-276bd1db41d5/images/5f79f7afd038455f5e988b7f20a28a1adcd03f58ff1447b59aea0cadfa48c2bc.png",
+      "cashapp": "https://static.prod-images.emergentagent.com/jobs/522d1ae5-e3a1-4a99-90c4-276bd1db41d5/images/661ccc106c1c54c9f0b2f02d746e6c6855b7a0b2041038b4a435bb1ce68732ff.png",
+      "chime": "https://static.prod-images.emergentagent.com/jobs/522d1ae5-e3a1-4a99-90c4-276bd1db41d5/images/d7f5947ac856d89a0c445e754fe8b0e3da8bcc763883a8e7a57e505b0e32940d.png",
+      "stripe": "https://static.prod-images.emergentagent.com/jobs/522d1ae5-e3a1-4a99-90c4-276bd1db41d5/images/48b3ea872e36bd58ddcc3ce6667803b8ca88d81ea2dd5c6582978d2bb2df0501.png",
+      "paypal": "https://images.pexels.com/photos/5437587/pexels-photo-5437587.jpeg"
+    }
+  },
+  "accessibility_and_testing": {
+    "contrast": "Ensure minimum 4.5:1 ratio for normal text. Avoid pure transparent overlays.",
+    "testing_attributes": "All interactive elements, forms, and key data points MUST include 'data-testid' using kebab-case role-based names (e.g., 'connect-venmo-button', 'ai-report-prompt-input', 'download-pdf-button').",
+    "motion_preference": "Respect prefers-reduced-motion."
+  },
+  "page_specific_guidelines": {
+    "auth": "Split screen layout. Left: hero_background image covering full height with a dark overlay (bg-stone-900/30). Right: White background, centered form with Google Auth and Email/Password fields.",
+    "dashboard": "Control Room Grid. Top row: Aggregate balances and cash flow chart (Shadcn/Recharts). Side column: Provider Connection Status Panel showing connected apps and 'Add New' buttons. Main area: Paginated transaction list.",
+    "report_builder": "Two-pane layout. Left: Form controls (Standard Filters: Date, Provider, Category) AND a large textured AI Prompt Textarea (Clay & Crisp style). Right: PDF preview canvas pane (use solid white background with 1px border to represent A4 paper)."
+  },
+  "instructions_to_main_agent": [
+    "Strictly adhere to the typography, specifically 'Cabinet Grotesk' for headings and 'Work Sans' for body. Do not default to Inter.",
+    "Implement the 'Organic & Earthy' color palette. The background should be slightly off-white (#FDFBF7) to reduce eye strain, not pure white.",
+    "For the Provider Connection Status Panel, use the generated provider_logos. Map them exactly to Venmo, Cash App, Chime, Stripe, and PayPal respectively. DO NOT use placeholder images if you add more providers; use Phosphor icons instead.",
+    "Report generation is a core feature: Ensure the UI clearly distinguishes between standard filters and the AI prompt text area. Provide visual feedback (loaders/skeleton) when generating the PDF.",
+    "Use Shadcn UI components but override their default styles to match the 'Clay & Crisp' and 'Solid' aesthetic described. Remove excessive rounded corners; cap them at 8px (rounded-lg).",
+    "Add data-testid to every button, link, and input as required by the E1 rules."
+  ]
+}
