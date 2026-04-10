@@ -637,63 +637,72 @@ async def sync_plaid_item(
         },
         timeout=30,
     )
-    if transactions_response.status_code >= 400:
-        raise HTTPException(status_code=400, detail="Failed to sync Plaid transactions")
-
-    transaction_body = transactions_response.json()
     saved_transactions = 0
-    for tx in transaction_body.get("transactions", []):
-        raw_amount = float(tx.get("amount") or 0.0)
-        direction = "expense" if raw_amount >= 0 else "income"
-        amount = round(abs(raw_amount), 2)
+    if transactions_response.status_code < 400:
+        transaction_body = transactions_response.json()
+        for tx in transaction_body.get("transactions", []):
+            raw_amount = float(tx.get("amount") or 0.0)
+            direction = "expense" if raw_amount >= 0 else "income"
+            amount = round(abs(raw_amount), 2)
 
-        category_info = tx.get("personal_finance_category") or {}
-        category = category_info.get("primary") or "uncategorized"
-        account_provider = derive_provider(item.get("institution_name") or tx.get("name", ""))
+            category_info = tx.get("personal_finance_category") or {}
+            category = category_info.get("primary") or "uncategorized"
+            account_provider = derive_provider(item.get("institution_name") or tx.get("name", ""))
 
-        tx_doc = {
-            "id": str(uuid.uuid4()),
-            "user_id": current_user["id"],
-            "provider": account_provider,
-            "account_id": tx.get("account_id"),
-            "external_transaction_id": tx.get("transaction_id"),
-            "amount": amount,
-            "direction": direction,
-            "category": category.lower(),
-            "description": tx.get("merchant_name") or tx.get("name") or "Transaction",
-            "transaction_date": tx.get("authorized_date") or tx.get("date"),
-            "source": "plaid",
-            "created_at": now_iso(),
-            "updated_at": now_iso(),
-        }
-
-        await db.transactions.update_one(
-            {
+            tx_doc = {
+                "id": str(uuid.uuid4()),
                 "user_id": current_user["id"],
-                "external_transaction_id": tx_doc["external_transaction_id"],
-            },
-            {
-                "$set": {
-                    "provider": tx_doc["provider"],
-                    "account_id": tx_doc["account_id"],
-                    "amount": tx_doc["amount"],
-                    "direction": tx_doc["direction"],
-                    "category": tx_doc["category"],
-                    "description": tx_doc["description"],
-                    "transaction_date": tx_doc["transaction_date"],
-                    "source": tx_doc["source"],
-                    "updated_at": tx_doc["updated_at"],
-                },
-                "$setOnInsert": {
-                    "id": tx_doc["id"],
-                    "user_id": tx_doc["user_id"],
+                "provider": account_provider,
+                "account_id": tx.get("account_id"),
+                "external_transaction_id": tx.get("transaction_id"),
+                "amount": amount,
+                "direction": direction,
+                "category": category.lower(),
+                "description": tx.get("merchant_name") or tx.get("name") or "Transaction",
+                "transaction_date": tx.get("authorized_date") or tx.get("date"),
+                "source": "plaid",
+                "created_at": now_iso(),
+                "updated_at": now_iso(),
+            }
+
+            await db.transactions.update_one(
+                {
+                    "user_id": current_user["id"],
                     "external_transaction_id": tx_doc["external_transaction_id"],
-                    "created_at": tx_doc["created_at"],
                 },
-            },
-            upsert=True,
-        )
-        saved_transactions += 1
+                {
+                    "$set": {
+                        "provider": tx_doc["provider"],
+                        "account_id": tx_doc["account_id"],
+                        "amount": tx_doc["amount"],
+                        "direction": tx_doc["direction"],
+                        "category": tx_doc["category"],
+                        "description": tx_doc["description"],
+                        "transaction_date": tx_doc["transaction_date"],
+                        "source": tx_doc["source"],
+                        "updated_at": tx_doc["updated_at"],
+                    },
+                    "$setOnInsert": {
+                        "id": tx_doc["id"],
+                        "user_id": tx_doc["user_id"],
+                        "external_transaction_id": tx_doc["external_transaction_id"],
+                        "created_at": tx_doc["created_at"],
+                    },
+                },
+                upsert=True,
+            )
+            saved_transactions += 1
+    else:
+        error_payload = {}
+        try:
+            error_payload = transactions_response.json()
+        except Exception:
+            pass
+        plaid_error_code = error_payload.get("error_code")
+        if plaid_error_code in {"PRODUCT_NOT_READY", "NO_TRANSACTIONS_AVAILABLE"}:
+            logger.info("Plaid transactions not ready yet for item %s", item.get("item_id"))
+        else:
+            raise HTTPException(status_code=400, detail="Failed to sync Plaid transactions")
 
     await db.plaid_items.update_one(
         {"id": item["id"]},
