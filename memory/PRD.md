@@ -56,6 +56,8 @@ Build a fully functional money management system where I can connect my banks an
 - Added dashboard AI Weekly Financial Health Score card with custom focus prompt, why-changed insights, and 3 action steps
 - Added advisor backend APIs for weekly score analysis (`/api/advisor/weekly-review`) and on-demand PDF export (`/api/advisor/weekly-review/pdf`)
 - Stabilized frontend runtime by removing duplicate Plaid SDK embedding conditions and chart sizing warnings during first render
+- Hardened Google sign-in with popup-to-redirect fallback and redirect result recovery flow
+- Improved weekly advisor comparison readability by capping extreme expense change percentages for clearer user interpretation
 
 ## Prioritized Backlog
 ### P0 (Critical to complete fully live integrations)

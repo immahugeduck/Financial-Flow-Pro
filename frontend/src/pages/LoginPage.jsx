@@ -2,7 +2,11 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
-import { signInWithGooglePopup } from "@/lib/firebase";
+import {
+  resolveGoogleRedirectResult,
+  signInWithGooglePopup,
+  signInWithGoogleRedirect,
+} from "@/lib/firebase";
 
 const heroImage =
   "https://static.prod-images.emergentagent.com/jobs/522d1ae5-e3a1-4a99-90c4-276bd1db41d5/images/3067d5d0c23655b3bd7934e2b86bf899036a2fd224dc234b027724f3ae1d11e2.png";
@@ -24,6 +28,36 @@ export default function LoginPage() {
       navigate("/dashboard");
     }
   }, [isAuthenticated, navigate]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const consumeRedirectResult = async () => {
+      try {
+        const result = await resolveGoogleRedirectResult();
+        const googleUser = result?.user;
+        if (!googleUser?.email || !googleUser?.uid || !mounted) {
+          return;
+        }
+
+        await googleLogin({
+          email: googleUser.email,
+          full_name: googleUser.displayName || "Google User",
+          google_id: googleUser.uid,
+        });
+        navigate("/dashboard");
+      } catch (error) {
+        if (mounted) {
+          toast.error(error?.message || "Google redirect sign-in failed");
+        }
+      }
+    };
+
+    consumeRedirectResult();
+    return () => {
+      mounted = false;
+    };
+  }, [googleLogin, navigate]);
 
   const submitForm = async (event) => {
     event.preventDefault();
@@ -58,7 +92,24 @@ export default function LoginPage() {
       });
       navigate("/dashboard");
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Google sign-in failed");
+      const code = error?.code || "";
+      const shouldFallbackToRedirect = [
+        "auth/popup-blocked",
+        "auth/popup-closed-by-user",
+        "auth/cancelled-popup-request",
+      ].includes(code);
+
+      if (shouldFallbackToRedirect) {
+        toast.info("Switching to secure redirect sign-in…");
+        try {
+          await signInWithGoogleRedirect();
+          return;
+        } catch (redirectError) {
+          toast.error(redirectError?.message || "Google redirect sign-in failed");
+        }
+      } else {
+        toast.error(error?.response?.data?.detail || error?.message || "Google sign-in failed");
+      }
     } finally {
       setIsGoogleSubmitting(false);
     }

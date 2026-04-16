@@ -277,11 +277,21 @@ def compute_weekly_financial_health(
     previous_expenses = float(previous_summary["expenses"])
     current_expenses = float(current_summary["expenses"])
     expense_change_pct = 0.0
+    expense_change_basis = "standard"
+    expense_change_display = 0.0
     if previous_expenses > 0:
         expense_change_pct = ((current_expenses - previous_expenses) / previous_expenses) * 100
+        expense_change_display = round(max(-250.0, min(250.0, expense_change_pct)), 1)
+    elif current_expenses > 0:
+        expense_change_pct = 250.0
+        expense_change_display = 250.0
+        expense_change_basis = "new_expense_from_zero"
 
     expense_trend_impact = 0.0
-    if expense_change_pct <= -10:
+    if expense_change_basis == "new_expense_from_zero":
+        expense_trend_impact = -12.0
+        why_changed.append("Spending appeared this week after a zero-expense prior week.")
+    elif expense_change_pct <= -10:
         expense_trend_impact = 12.0
         why_changed.append("Spending dropped significantly versus last week.")
     elif expense_change_pct < 0:
@@ -299,7 +309,7 @@ def compute_weekly_financial_health(
         {
             "factor": "Expense Trend",
             "impact": expense_trend_impact,
-            "detail": f"Expense change vs previous week: {round(expense_change_pct, 1)}%",
+            "detail": f"Expense change vs previous week: {expense_change_display}%",
         }
     )
 
@@ -330,7 +340,8 @@ def compute_weekly_financial_health(
         "score_breakdown": score_breakdown,
         "why_changed": why_changed,
         "comparison": {
-            "expense_change_pct": round(expense_change_pct, 1),
+            "expense_change_pct": expense_change_display,
+            "expense_change_basis": expense_change_basis,
             "net_change": round(net_change, 2),
             "income_cost_ratio_change": round(
                 float(current_summary["income_cost_ratio"]) - float(previous_summary["income_cost_ratio"]),
