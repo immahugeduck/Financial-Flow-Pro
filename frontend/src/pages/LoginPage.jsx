@@ -1,18 +1,18 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { signInWithGooglePopup } from "@/lib/firebase";
 
 const heroImage =
   "https://static.prod-images.emergentagent.com/jobs/522d1ae5-e3a1-4a99-90c4-276bd1db41d5/images/3067d5d0c23655b3bd7934e2b86bf899036a2fd224dc234b027724f3ae1d11e2.png";
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { login, register, isAuthenticated } = useAuth();
+  const { login, register, googleLogin, isAuthenticated } = useAuth();
   const [mode, setMode] = useState("login");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [googleConfig, setGoogleConfig] = useState({ enabled: false });
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     full_name: "",
     email: "",
@@ -24,13 +24,6 @@ export default function LoginPage() {
       navigate("/dashboard");
     }
   }, [isAuthenticated, navigate]);
-
-  useEffect(() => {
-    api
-      .get("/auth/google-config")
-      .then((response) => setGoogleConfig(response.data))
-      .catch(() => setGoogleConfig({ enabled: false }));
-  }, []);
 
   const submitForm = async (event) => {
     event.preventDefault();
@@ -46,6 +39,28 @@ export default function LoginPage() {
       toast.error(error?.response?.data?.detail || "Authentication failed");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      setIsGoogleSubmitting(true);
+      const result = await signInWithGooglePopup();
+      const googleUser = result.user;
+      if (!googleUser?.email || !googleUser?.uid) {
+        throw new Error("Google profile missing required fields");
+      }
+
+      await googleLogin({
+        email: googleUser.email,
+        full_name: googleUser.displayName || "Google User",
+        google_id: googleUser.uid,
+      });
+      navigate("/dashboard");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Google sign-in failed");
+    } finally {
+      setIsGoogleSubmitting(false);
     }
   };
 
@@ -67,7 +82,7 @@ export default function LoginPage() {
       <section className="flex items-center justify-center bg-[#FDFBF7] p-6 md:p-10" data-testid="auth-form-section">
         <div className="w-full max-w-lg rounded-lg border border-stone-200 bg-white p-8 shadow-sm">
           <p className="text-xs uppercase tracking-[0.2em] text-stone-500" data-testid="auth-form-label">
-            Welcome to Aura Finance
+            Welcome to Financial Flow
           </p>
           <h2 className="mt-2 text-3xl font-black" data-testid="auth-form-heading">
             {mode === "login" ? "Sign in to your workspace" : "Create your account"}
@@ -154,19 +169,14 @@ export default function LoginPage() {
             <button
               type="button"
               data-testid="google-oauth-start-button"
+              disabled={isGoogleSubmitting}
               className="w-full rounded-lg border border-stone-200 bg-white px-5 py-3 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-50"
-              onClick={() => {
-                if (!googleConfig.enabled) {
-                  toast.error("Google OAuth not configured yet. Add Google keys in backend env.");
-                  return;
-                }
-                window.location.href = `${process.env.REACT_APP_BACKEND_URL}/api/auth/google/start`;
-              }}
+              onClick={handleGoogleSignIn}
             >
-              Continue with Google
+              {isGoogleSubmitting ? "Connecting Google…" : "Continue with Google"}
             </button>
             <p className="mt-2 text-center text-xs text-stone-500" data-testid="google-oauth-status-text">
-              {googleConfig.enabled ? "Google login is active." : "Google login activates after adding Google credentials."}
+              Google popup login is active for Financial Flow.
             </p>
           </div>
         </div>

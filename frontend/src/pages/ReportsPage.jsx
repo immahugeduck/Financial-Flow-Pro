@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 
 const defaultPayload = {
-  title: "Custom Financial Report",
+  title: "Financial Flow Report",
   filters: {
     provider: "",
     category: "",
@@ -73,7 +73,7 @@ export default function ReportsPage() {
       <section className="rounded-lg border border-stone-200 bg-white p-6 shadow-sm" data-testid="reports-header-card">
         <h2 className="text-4xl font-black" data-testid="reports-header-title">Generate custom financial reports</h2>
         <p className="mt-2 text-sm text-stone-600" data-testid="reports-header-subtext">
-          Mix date/category filters with prompt instructions, then export PDF instantly.
+          Mix date/category filters with prompt instructions, then export Financial Flow PDFs instantly.
         </p>
       </section>
 

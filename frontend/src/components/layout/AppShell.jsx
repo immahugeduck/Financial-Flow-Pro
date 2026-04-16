@@ -19,10 +19,10 @@ export const AppShell = () => {
         <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-4 md:px-8 lg:px-12">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-stone-500" data-testid="brand-label">
-              Aura Finance
+              Financial Flow
             </p>
             <h1 className="text-xl font-bold" data-testid="brand-title">
-              Money Management Control Room
+              Financial Flow Control Room
             </h1>
           </div>
 

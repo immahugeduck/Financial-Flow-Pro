@@ -47,6 +47,13 @@ Build a fully functional money management system where I can connect my banks an
 - Activated user-provided Gemini API key and validated AI-powered custom insights in generated reports
 - Added user-provided Plaid credentials, validated live link-token generation, and verified public-token exchange/account sync flow
 
+### 2026-04-16
+- Implemented Firebase Google popup authentication flow and connected it to backend session creation (`/api/auth/google-login`)
+- Rebranded UI and report defaults from Aura Finance to Financial Flow (header, auth copy, report defaults, demo label)
+- Enhanced Plaid management UX with config status badge, linked institutions list, per-item sync, and unlink controls
+- Added Plaid sync resilience metadata (`transactions_pending`, `pending_reason`) and sync-item endpoint for targeted retries
+- Added automatic frontend polling retries when institution transactions are still preparing
+
 ## Prioritized Backlog
 ### P0 (Critical to complete fully live integrations)
 - Add real `PLAID_CLIENT_ID` + `PLAID_SECRET` and validate live account linking end-to-end

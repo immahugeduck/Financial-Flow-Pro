@@ -26,16 +26,22 @@ const initialForm = {
 export default function ConnectionsPage() {
   const [status, setStatus] = useState([]);
   const [accounts, setAccounts] = useState([]);
+  const [plaidItems, setPlaidItems] = useState([]);
+  const [plaidConfigured, setPlaidConfigured] = useState(false);
+  const [syncingItems, setSyncingItems] = useState({});
   const [formData, setFormData] = useState(initialForm);
 
   const loadData = async () => {
     try {
-      const [providersResponse, accountsResponse] = await Promise.all([
+      const [providersResponse, accountsResponse, plaidItemsResponse] = await Promise.all([
         api.get("/connections/providers"),
         api.get("/connections/accounts"),
+        api.get("/connections/plaid/items"),
       ]);
       setStatus(providersResponse.data.providers || []);
       setAccounts(accountsResponse.data.accounts || []);
+      setPlaidItems(plaidItemsResponse.data.items || []);
+      setPlaidConfigured(Boolean(providersResponse.data.plaid_configured));
     } catch {
       toast.error("Failed to load account connections");
     }
@@ -60,6 +66,65 @@ export default function ConnectionsPage() {
     }
   };
 
+  const syncPlaidItem = async (itemId, silent = false) => {
+    try {
+      setSyncingItems((prev) => ({ ...prev, [itemId]: true }));
+      const response = await api.post(`/connections/plaid/sync-item/${itemId}`);
+      const isPending = Boolean(response.data?.sync?.transactions_pending);
+      if (!silent) {
+        if (isPending) {
+          toast.info("Sync started. Transactions are still preparing from institution.");
+        } else {
+          toast.success("Institution synced successfully");
+        }
+      }
+      await loadData();
+      return response.data;
+    } catch (error) {
+      if (!silent) {
+        toast.error(error?.response?.data?.detail || "Unable to sync this institution");
+      }
+      return null;
+    } finally {
+      setSyncingItems((prev) => ({ ...prev, [itemId]: false }));
+    }
+  };
+
+  const pollUntilTransactionsReady = async (itemId) => {
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      await new Promise((resolve) => {
+        setTimeout(resolve, 4000);
+      });
+
+      const response = await syncPlaidItem(itemId, true);
+      const stillPending = Boolean(response?.sync?.transactions_pending);
+      if (!stillPending) {
+        toast.success("Plaid transactions finished syncing");
+        return;
+      }
+    }
+    toast.info("Transactions are still processing. You can tap Sync later.");
+  };
+
+  const handlePlaidConnected = async (connectionResponse) => {
+    await loadData();
+    const itemId = connectionResponse?.item_id;
+    const pending = Boolean(connectionResponse?.sync?.transactions_pending);
+    if (itemId && pending) {
+      pollUntilTransactionsReady(itemId);
+    }
+  };
+
+  const unlinkPlaidItem = async (itemId) => {
+    try {
+      await api.delete(`/connections/plaid/item/${itemId}`);
+      toast.success("Institution unlinked successfully");
+      await loadData();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Unable to unlink institution");
+    }
+  };
+
   return (
     <div className="space-y-8" data-testid="connections-page">
       <section className="rounded-lg border border-stone-200 bg-white p-6 shadow-sm" data-testid="connections-header-card">
@@ -81,18 +146,34 @@ export default function ConnectionsPage() {
             <p className="text-sm text-stone-600" data-testid="plaid-connect-description">
               Connect real institutions through Plaid and sync transactions automatically.
             </p>
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-xs uppercase tracking-[0.16em] text-stone-500" data-testid="plaid-configuration-label">
+                Plaid status
+              </span>
+              <span
+                className={`rounded-md px-2 py-1 text-xs ${plaidConfigured ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}
+                data-testid="plaid-configuration-status"
+              >
+                {plaidConfigured ? "Configured" : "Missing keys"}
+              </span>
+            </div>
           </div>
           <div className="flex items-center gap-3">
-            <PlaidConnectButton onConnected={loadData} />
+            <PlaidConnectButton onConnected={handlePlaidConnected} />
             <button
               type="button"
               data-testid="plaid-sync-button"
               className="rounded-lg border border-stone-200 bg-white px-5 py-3 text-sm font-medium text-stone-700 hover:bg-stone-100"
               onClick={async () => {
                 try {
-                  await api.post("/connections/plaid/sync");
-                  toast.success("Plaid sync complete");
-                  loadData();
+                  const response = await api.post("/connections/plaid/sync");
+                  const pendingCount = Number(response.data?.pending_items || 0);
+                  if (pendingCount > 0) {
+                    toast.info(`${pendingCount} institution(s) still preparing transactions`);
+                  } else {
+                    toast.success("Plaid sync complete");
+                  }
+                  await loadData();
                 } catch (error) {
                   toast.error(error?.response?.data?.detail || "Unable to sync Plaid");
                 }
@@ -101,6 +182,59 @@ export default function ConnectionsPage() {
               Sync Plaid
             </button>
           </div>
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-stone-200 bg-white p-6 shadow-sm" data-testid="plaid-institutions-card">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-xl font-bold" data-testid="plaid-institutions-title">Linked institutions</h3>
+          <span className="text-xs uppercase tracking-[0.16em] text-stone-500" data-testid="plaid-institutions-count">
+            {plaidItems.length} linked
+          </span>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2" data-testid="plaid-institutions-grid">
+          {plaidItems.map((item) => (
+            <article
+              key={item.item_id}
+              className="rounded-md border border-stone-200 p-4"
+              data-testid={`plaid-item-card-${item.item_id}`}
+            >
+              <p className="font-medium" data-testid={`plaid-item-name-${item.item_id}`}>{item.institution_name}</p>
+              <p className="mt-1 text-xs text-stone-500" data-testid={`plaid-item-meta-${item.item_id}`}>
+                Item ID: {item.item_id}
+              </p>
+              <p className="mt-1 text-xs text-stone-500" data-testid={`plaid-item-accounts-${item.item_id}`}>
+                Accounts: {item.account_count} · Last sync: {item.last_synced_at || "Not synced yet"}
+              </p>
+
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  type="button"
+                  data-testid={`plaid-item-sync-button-${item.item_id}`}
+                  disabled={Boolean(syncingItems[item.item_id])}
+                  className="rounded-md bg-[#4A6741] px-3 py-2 text-xs font-medium text-white disabled:opacity-60"
+                  onClick={() => syncPlaidItem(item.item_id)}
+                >
+                  {syncingItems[item.item_id] ? "Syncing…" : "Sync now"}
+                </button>
+                <button
+                  type="button"
+                  data-testid={`plaid-item-unlink-button-${item.item_id}`}
+                  className="rounded-md border border-stone-200 px-3 py-2 text-xs font-medium text-stone-700 hover:bg-stone-100"
+                  onClick={() => unlinkPlaidItem(item.item_id)}
+                >
+                  Unlink
+                </button>
+              </div>
+            </article>
+          ))}
+
+          {!plaidItems.length && (
+            <p className="text-sm text-stone-500" data-testid="plaid-institutions-empty-state">
+              No Plaid institutions linked yet.
+            </p>
+          )}
         </div>
       </section>
 

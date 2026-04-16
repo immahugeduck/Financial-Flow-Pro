@@ -15,7 +15,11 @@ export const PlaidConnectButton = ({ onConnected }) => {
           public_token: publicToken,
           institution_name: metadata?.institution?.name || "Plaid Institution",
         });
-        toast.success("Plaid account linked successfully");
+        if (response.data?.sync?.transactions_pending) {
+          toast.info("Account linked. Transactions are still syncing — retry in progress.");
+        } else {
+          toast.success("Plaid account linked successfully");
+        }
         setLinkToken("");
         onConnected(response.data);
       } catch (error) {

@@ -14,7 +14,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from motor.motor_asyncio import AsyncIOMotorClient
 from passlib.context import CryptContext
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field
 import requests
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
@@ -37,7 +37,7 @@ gemini_model = os.environ.get("GEMINI_MODEL")
 # Services
 client = AsyncIOMotorClient(mongo_url)
 db = client[db_name]
-app = FastAPI(title="Money Management API")
+app = FastAPI(title="Financial Flow API")
 api_router = APIRouter(prefix="/api")
 security = HTTPBearer()
 password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -112,6 +112,10 @@ def derive_provider(text: str) -> str:
     if "paypal" in text_lower:
         return "paypal"
     return "bank"
+
+
+def is_plaid_configured() -> bool:
+    return bool(os.environ.get("PLAID_CLIENT_ID") and os.environ.get("PLAID_SECRET"))
 
 
 def build_pdf_bytes(title: str, content: str) -> bytes:
@@ -223,7 +227,7 @@ def report_body(
     ) or "- No categories available"
 
     lines = [
-        f"Report generated at: {created_at}",
+        f"Financial Flow report generated at: {created_at}",
         "",
         "## Financial Snapshot",
         f"- Total Income: ${summary['income']}",
@@ -537,7 +541,7 @@ async def plaid_link_token(
     payload = {
         "client_id": plaid_client_id,
         "secret": plaid_secret,
-        "client_name": "Aura Finance",
+        "client_name": "Financial Flow",
         "country_codes": ["US"],
         "language": "en",
         "products": ["transactions", "auth", "identity"],
@@ -638,6 +642,8 @@ async def sync_plaid_item(
         timeout=30,
     )
     saved_transactions = 0
+    transactions_pending = False
+    pending_reason = None
     if transactions_response.status_code < 400:
         transaction_body = transactions_response.json()
         for tx in transaction_body.get("transactions", []):
@@ -701,6 +707,8 @@ async def sync_plaid_item(
         plaid_error_code = error_payload.get("error_code")
         if plaid_error_code in {"PRODUCT_NOT_READY", "NO_TRANSACTIONS_AVAILABLE"}:
             logger.info("Plaid transactions not ready yet for item %s", item.get("item_id"))
+            transactions_pending = True
+            pending_reason = plaid_error_code
         else:
             raise HTTPException(status_code=400, detail="Failed to sync Plaid transactions")
 
@@ -712,7 +720,35 @@ async def sync_plaid_item(
     return {
         "saved_accounts": saved_accounts,
         "saved_transactions": saved_transactions,
+        "transactions_pending": transactions_pending,
+        "pending_reason": pending_reason,
     }
+
+
+@api_router.get("/connections/plaid/items")
+async def plaid_items_list(
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    items = await db.plaid_items.find({"user_id": current_user["id"]}, {"_id": 0}).to_list(100)
+    items_sorted = sorted(items, key=lambda item: item.get("created_at", ""), reverse=True)
+
+    sanitized_items: list[dict[str, Any]] = []
+    for item in items_sorted:
+        account_count = await db.accounts.count_documents(
+            {"user_id": current_user["id"], "plaid_item_id": item.get("item_id")}
+        )
+        sanitized_items.append(
+            {
+                "id": item.get("id"),
+                "item_id": item.get("item_id"),
+                "institution_name": item.get("institution_name"),
+                "created_at": item.get("created_at"),
+                "last_synced_at": item.get("last_synced_at"),
+                "account_count": account_count,
+            }
+        )
+
+    return {"items": sanitized_items, "configured": is_plaid_configured()}
 
 
 @api_router.post("/connections/plaid/exchange")
@@ -768,8 +804,69 @@ async def plaid_exchange_public_token(
     sync_result = await sync_plaid_item(current_user, stored_item)
     return {
         "item_id": item_doc["item_id"],
+        "plaid_connection_id": stored_item.get("id"),
         "institution_name": item_doc["institution_name"],
         "sync": sync_result,
+    }
+
+
+@api_router.post("/connections/plaid/sync-item/{item_id}")
+async def plaid_sync_item(
+    item_id: str,
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    item = await db.plaid_items.find_one(
+        {"user_id": current_user["id"], "item_id": item_id},
+        {"_id": 0},
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="Plaid item not found")
+
+    sync_result = await sync_plaid_item(current_user, item)
+    return {
+        "item_id": item_id,
+        "institution_name": item.get("institution_name"),
+        "sync": sync_result,
+    }
+
+
+@api_router.delete("/connections/plaid/item/{item_id}")
+async def plaid_unlink_item(
+    item_id: str,
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    item = await db.plaid_items.find_one(
+        {"user_id": current_user["id"], "item_id": item_id},
+        {"_id": 0},
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="Plaid item not found")
+
+    linked_accounts = await db.accounts.find(
+        {"user_id": current_user["id"], "plaid_item_id": item_id},
+        {"_id": 0, "external_account_id": 1},
+    ).to_list(500)
+    external_ids = [acc.get("external_account_id") for acc in linked_accounts if acc.get("external_account_id")]
+
+    deleted_accounts = await db.accounts.delete_many(
+        {"user_id": current_user["id"], "plaid_item_id": item_id}
+    )
+
+    transaction_query: dict[str, Any] = {
+        "user_id": current_user["id"],
+        "source": "plaid",
+        "account_id": {"$in": external_ids if external_ids else ["__none__"]},
+    }
+    deleted_transactions = await db.transactions.delete_many(transaction_query)
+
+    deleted_item = await db.plaid_items.delete_one(
+        {"user_id": current_user["id"], "item_id": item_id}
+    )
+
+    return {
+        "removed": bool(deleted_item.deleted_count),
+        "deleted_accounts": deleted_accounts.deleted_count,
+        "deleted_transactions": deleted_transactions.deleted_count,
     }
 
 
@@ -783,15 +880,19 @@ async def plaid_sync_all(
 
     total_accounts = 0
     total_transactions = 0
+    pending_items = 0
     for item in items:
         result = await sync_plaid_item(current_user, item)
         total_accounts += result["saved_accounts"]
         total_transactions += result["saved_transactions"]
+        if result.get("transactions_pending"):
+            pending_items += 1
 
     return {
         "synced_items": len(items),
         "saved_accounts": total_accounts,
         "saved_transactions": total_transactions,
+        "pending_items": pending_items,
     }
 
 
@@ -816,7 +917,11 @@ async def provider_status(
         )
 
     plaid_connections = await db.plaid_items.count_documents({"user_id": current_user["id"]})
-    return {"providers": data, "plaid_connections": plaid_connections}
+    return {
+        "providers": data,
+        "plaid_connections": plaid_connections,
+        "plaid_configured": is_plaid_configured(),
+    }
 
 
 @api_router.post("/transactions/manual")
@@ -1052,7 +1157,7 @@ async def startup_seed_demo() -> None:
         demo_user = {
             "id": str(uuid.uuid4()),
             "email": demo_email,
-            "full_name": "Demo User",
+            "full_name": "Financial Flow Demo",
             "password_hash": password_context.hash("Demo123!"),
             "google_id": None,
             "created_at": now_iso(),
@@ -1060,6 +1165,11 @@ async def startup_seed_demo() -> None:
         }
         await db.users.insert_one(dict(demo_user))
         logger.info("Seeded demo account: %s", demo_email)
+    elif existing.get("full_name") in {"Demo User", "Financial Flow Demo User"}:
+        await db.users.update_one(
+            {"id": existing["id"]},
+            {"$set": {"full_name": "Financial Flow Demo", "updated_at": now_iso()}},
+        )
 
 
 @app.on_event("shutdown")

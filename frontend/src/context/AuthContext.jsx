@@ -52,6 +52,13 @@ export const AuthProvider = ({ children }) => {
     toast.success("Welcome back");
   };
 
+  const googleLogin = async (payload) => {
+    const response = await api.post("/auth/google-login", payload);
+    authStorage.setSession(response.data.token, response.data.user);
+    setUser(response.data.user);
+    toast.success("Signed in with Google");
+  };
+
   const logout = () => {
     authStorage.clearSession();
     setUser(null);
@@ -64,6 +71,7 @@ export const AuthProvider = ({ children }) => {
       loading,
       register,
       login,
+      googleLogin,
       logout,
       completeTokenLogin,
       isAuthenticated: Boolean(user),
