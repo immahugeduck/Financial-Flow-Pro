@@ -174,6 +174,291 @@ def summarize_transactions(transactions: list[dict[str, Any]]) -> dict[str, Any]
     }
 
 
+def clamp_score(value: float) -> int:
+    return max(0, min(100, int(round(value))))
+
+
+def score_label(score: int) -> str:
+    if score >= 80:
+        return "Excellent"
+    if score >= 65:
+        return "Strong"
+    if score >= 50:
+        return "Stable"
+    if score >= 35:
+        return "Needs Attention"
+    return "Critical"
+
+
+def week_range_strings() -> dict[str, str]:
+    today = date.today()
+    current_start = today - timedelta(days=today.weekday())
+    current_end = current_start + timedelta(days=6)
+    previous_start = current_start - timedelta(days=7)
+    previous_end = current_start - timedelta(days=1)
+    return {
+        "current_start": current_start.isoformat(),
+        "current_end": current_end.isoformat(),
+        "previous_start": previous_start.isoformat(),
+        "previous_end": previous_end.isoformat(),
+    }
+
+
+def transactions_summary_window(transactions: list[dict[str, Any]]) -> dict[str, Any]:
+    income = round(
+        sum(float(tx.get("amount", 0.0)) for tx in transactions if tx.get("direction") == "income"),
+        2,
+    )
+    expenses = round(
+        sum(float(tx.get("amount", 0.0)) for tx in transactions if tx.get("direction") == "expense"),
+        2,
+    )
+    net = round(income - expenses, 2)
+    income_cost_ratio = round(income / expenses, 2) if expenses > 0 else (99.0 if income > 0 else 0.0)
+    savings_rate = round(net / income, 3) if income > 0 else 0.0
+
+    category_totals: dict[str, float] = {}
+    for tx in transactions:
+        category = (tx.get("category") or "uncategorized").lower()
+        category_totals[category] = category_totals.get(category, 0.0) + float(tx.get("amount", 0.0))
+
+    top_categories = sorted(category_totals.items(), key=lambda item: item[1], reverse=True)[:5]
+    return {
+        "income": income,
+        "expenses": expenses,
+        "net": net,
+        "income_cost_ratio": income_cost_ratio,
+        "savings_rate": savings_rate,
+        "transaction_count": len(transactions),
+        "top_categories": [{"category": name, "amount": round(value, 2)} for name, value in top_categories],
+    }
+
+
+def compute_weekly_financial_health(
+    current_summary: dict[str, Any],
+    previous_summary: dict[str, Any],
+) -> dict[str, Any]:
+    score = 50.0
+    score_breakdown: list[dict[str, Any]] = []
+    why_changed: list[str] = []
+
+    savings_rate = float(current_summary["savings_rate"])
+    savings_impact = max(-18.0, min(18.0, savings_rate * 40.0))
+    score += savings_impact
+    score_breakdown.append(
+        {
+            "factor": "Savings Rate",
+            "impact": round(savings_impact, 1),
+            "detail": f"Current savings rate: {round(savings_rate * 100, 1)}%",
+        }
+    )
+
+    income_cost_ratio = float(current_summary["income_cost_ratio"])
+    ratio_impact = 0.0
+    if income_cost_ratio >= 1.5:
+        ratio_impact = 16.0
+    elif income_cost_ratio >= 1.2:
+        ratio_impact = 10.0
+    elif income_cost_ratio >= 1.0:
+        ratio_impact = 4.0
+    elif income_cost_ratio >= 0.8:
+        ratio_impact = -6.0
+    else:
+        ratio_impact = -14.0
+    score += ratio_impact
+    score_breakdown.append(
+        {
+            "factor": "Income-to-Cost Ratio",
+            "impact": ratio_impact,
+            "detail": f"Income-to-cost ratio: {income_cost_ratio}",
+        }
+    )
+
+    previous_expenses = float(previous_summary["expenses"])
+    current_expenses = float(current_summary["expenses"])
+    expense_change_pct = 0.0
+    if previous_expenses > 0:
+        expense_change_pct = ((current_expenses - previous_expenses) / previous_expenses) * 100
+
+    expense_trend_impact = 0.0
+    if expense_change_pct <= -10:
+        expense_trend_impact = 12.0
+        why_changed.append("Spending dropped significantly versus last week.")
+    elif expense_change_pct < 0:
+        expense_trend_impact = 6.0
+        why_changed.append("Spending is slightly down compared to last week.")
+    elif expense_change_pct >= 15:
+        expense_trend_impact = -12.0
+        why_changed.append("Spending jumped sharply compared to last week.")
+    elif expense_change_pct > 0:
+        expense_trend_impact = -6.0
+        why_changed.append("Spending is up week-over-week.")
+
+    score += expense_trend_impact
+    score_breakdown.append(
+        {
+            "factor": "Expense Trend",
+            "impact": expense_trend_impact,
+            "detail": f"Expense change vs previous week: {round(expense_change_pct, 1)}%",
+        }
+    )
+
+    net_change = float(current_summary["net"]) - float(previous_summary["net"])
+    net_impact = 0.0
+    if net_change >= 100:
+        net_impact = 8.0
+    elif net_change > 0:
+        net_impact = 4.0
+    elif net_change <= -100:
+        net_impact = -8.0
+    elif net_change < 0:
+        net_impact = -4.0
+
+    score += net_impact
+    score_breakdown.append(
+        {
+            "factor": "Net Cash Momentum",
+            "impact": net_impact,
+            "detail": f"Net cash change vs previous week: ${round(net_change, 2)}",
+        }
+    )
+
+    final_score = clamp_score(score)
+    return {
+        "score": final_score,
+        "label": score_label(final_score),
+        "score_breakdown": score_breakdown,
+        "why_changed": why_changed,
+        "comparison": {
+            "expense_change_pct": round(expense_change_pct, 1),
+            "net_change": round(net_change, 2),
+            "income_cost_ratio_change": round(
+                float(current_summary["income_cost_ratio"]) - float(previous_summary["income_cost_ratio"]),
+                2,
+            ),
+        },
+    }
+
+
+def build_default_actions(current_summary: dict[str, Any], comparison: dict[str, Any]) -> list[str]:
+    actions: list[str] = []
+    top_categories = current_summary.get("top_categories", [])
+    if top_categories:
+        largest = top_categories[0]
+        actions.append(
+            f"Set a weekly cap for {largest['category']} at 90% of current spend (${round(largest['amount'] * 0.9, 2)})."
+        )
+
+    if float(current_summary.get("income_cost_ratio", 0)) < 1.0:
+        actions.append("Prioritize reducing variable expenses this week until income-to-cost ratio rises above 1.0.")
+
+    if float(comparison.get("expense_change_pct", 0)) > 0:
+        actions.append("Freeze discretionary purchases for 3 days and review recurring charges.")
+
+    if float(current_summary.get("savings_rate", 0)) < 0.1:
+        actions.append("Auto-transfer at least 10% of incoming funds to savings at each deposit.")
+
+    if not actions:
+        actions.append("Maintain current spending pattern and increase savings transfer by 2% this week.")
+
+    return actions[:3]
+
+
+async def generate_ai_advisor_analysis(
+    score_data: dict[str, Any],
+    current_summary: dict[str, Any],
+    previous_summary: dict[str, Any],
+    actions: list[str],
+    custom_prompt: str,
+) -> str:
+    if not gemini_api_key or not gemini_model:
+        return ""
+
+    try:
+        from google import genai
+
+        client_gemini = genai.Client(api_key=gemini_api_key)
+        prompt = (
+            "You are a specialized financial advisor AI. Return concise markdown with exactly these sections:\n"
+            "1) Weekly Financial Health Score\n"
+            "2) Why it changed vs previous week\n"
+            "3) Action plan for next 7 days\n"
+            "Use bullets and numbers. Be practical and non-judgmental.\n"
+            f"Current week summary: {current_summary}\n"
+            f"Previous week summary: {previous_summary}\n"
+            f"Computed score data: {score_data}\n"
+            f"Baseline actions: {actions}\n"
+            f"User custom focus (optional): {custom_prompt or 'None'}"
+        )
+
+        response = client_gemini.models.generate_content(
+            model=gemini_model,
+            contents=prompt,
+        )
+        return response.text or ""
+    except Exception as error:  # pragma: no cover - external API fallback
+        logger.warning("Advisor AI generation failed: %s", error)
+        return ""
+
+
+def advisor_pdf_content(review_data: dict[str, Any]) -> str:
+    score = review_data.get("score", 0)
+    label = review_data.get("label", "N/A")
+    week_window = review_data.get("week_window", {})
+    current = review_data.get("current_week", {})
+    previous = review_data.get("previous_week", {})
+    comparison = review_data.get("comparison", {})
+    breakdown = review_data.get("score_breakdown", [])
+    why_changed = review_data.get("why_changed", [])
+    action_steps = review_data.get("action_steps", [])
+    advisor_analysis = review_data.get("advisor_analysis", "")
+
+    lines = [
+        "Financial Flow Weekly Advisor Report",
+        f"Generated: {now_iso()}",
+        "",
+        "## Weekly Financial Health Score",
+        f"- Score: {score}/100 ({label})",
+        f"- Week Window: {week_window.get('current_start')} to {week_window.get('current_end')}",
+        "",
+        "## Current Week Metrics",
+        f"- Income: ${current.get('income', 0)}",
+        f"- Expenses: ${current.get('expenses', 0)}",
+        f"- Net Cash: ${current.get('net', 0)}",
+        f"- Income/Cost Ratio: {current.get('income_cost_ratio', 0)}",
+        f"- Savings Rate: {round(float(current.get('savings_rate', 0)) * 100, 1)}%",
+        "",
+        "## Previous Week Metrics",
+        f"- Income: ${previous.get('income', 0)}",
+        f"- Expenses: ${previous.get('expenses', 0)}",
+        f"- Net Cash: ${previous.get('net', 0)}",
+        "",
+        "## Week-over-Week Changes",
+        f"- Expense Change: {comparison.get('expense_change_pct', 0)}%",
+        f"- Net Change: ${comparison.get('net_change', 0)}",
+        f"- Income/Cost Ratio Change: {comparison.get('income_cost_ratio_change', 0)}",
+        "",
+        "## Score Breakdown",
+    ]
+
+    for item in breakdown:
+        lines.append(f"- {item.get('factor')}: impact {item.get('impact')} ({item.get('detail')})")
+
+    lines += ["", "## Why The Score Changed"]
+    if why_changed:
+        lines.extend([f"- {item}" for item in why_changed])
+    else:
+        lines.append("- No major week-over-week change detected.")
+
+    lines += ["", "## Action Plan"]
+    lines.extend([f"- {item}" for item in action_steps])
+
+    if advisor_analysis:
+        lines += ["", "## AI Advisor Notes", advisor_analysis]
+
+    return "\n".join(lines)
+
+
 async def generate_ai_section(
     prompt: str,
     summary: dict[str, Any],
@@ -314,9 +599,17 @@ class GenerateReportInput(BaseModel):
     prompt: str = Field(default="", max_length=3000)
 
 
+class AdvisorReviewInput(BaseModel):
+    custom_prompt: str = Field(default="", max_length=1200)
+
+
+class AdvisorPdfInput(BaseModel):
+    review_data: dict[str, Any]
+
+
 @api_router.get("/")
 async def root() -> dict[str, str]:
-    return {"message": "Money Management API is running"}
+    return {"message": "Financial Flow API is running"}
 
 
 @api_router.get("/health")
@@ -1058,6 +1351,80 @@ async def dashboard_summary(
         "monthly_cashflow": monthly_data,
         "recent_transactions": transactions[:8],
     }
+
+
+@api_router.post("/advisor/weekly-review")
+async def advisor_weekly_review(
+    payload: AdvisorReviewInput,
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    week_window = week_range_strings()
+    transactions = await db.transactions.find(
+        {
+            "user_id": current_user["id"],
+            "transaction_date": {
+                "$gte": week_window["previous_start"],
+                "$lte": week_window["current_end"],
+            },
+        },
+        {"_id": 0},
+    ).to_list(3000)
+
+    current_transactions = [
+        tx
+        for tx in transactions
+        if week_window["current_start"] <= (tx.get("transaction_date") or "") <= week_window["current_end"]
+    ]
+    previous_transactions = [
+        tx
+        for tx in transactions
+        if week_window["previous_start"] <= (tx.get("transaction_date") or "") <= week_window["previous_end"]
+    ]
+
+    current_summary = transactions_summary_window(current_transactions)
+    previous_summary = transactions_summary_window(previous_transactions)
+    score_data = compute_weekly_financial_health(current_summary, previous_summary)
+    action_steps = build_default_actions(current_summary, score_data["comparison"])
+    advisor_analysis = await generate_ai_advisor_analysis(
+        score_data,
+        current_summary,
+        previous_summary,
+        action_steps,
+        payload.custom_prompt,
+    )
+
+    return {
+        "week_window": week_window,
+        "score": score_data["score"],
+        "label": score_data["label"],
+        "current_week": current_summary,
+        "previous_week": previous_summary,
+        "comparison": score_data["comparison"],
+        "score_breakdown": score_data["score_breakdown"],
+        "why_changed": score_data["why_changed"],
+        "action_steps": action_steps,
+        "advisor_analysis": advisor_analysis,
+        "custom_prompt": payload.custom_prompt,
+    }
+
+
+@api_router.post("/advisor/weekly-review/pdf")
+async def advisor_weekly_review_pdf(
+    payload: AdvisorPdfInput,
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> StreamingResponse:
+    review_data = payload.review_data or {}
+    pdf_title = (
+        f"Financial Flow Weekly Advisor Score {review_data.get('score', 0)}"
+    )
+    pdf_content = advisor_pdf_content(review_data)
+    pdf_bytes = build_pdf_bytes(pdf_title, pdf_content)
+
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=financial-flow-weekly-advisor.pdf"},
+    )
 
 
 @api_router.post("/reports/generate")

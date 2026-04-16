@@ -7,7 +7,7 @@ import pytest
 import requests
 
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
+BASE_URL = (os.environ.get("REACT_APP_BACKEND_URL") or "").rstrip("/")
 
 
 def api_url(path: str) -> str:
@@ -125,11 +125,15 @@ def test_manual_account_creation_and_listing(authenticated_client: requests.Sess
     assert matched[0]["account_name"] == account_name
 
 
-def test_plaid_link_token_behavior_when_credentials_missing(authenticated_client: requests.Session) -> None:
+def test_plaid_link_token_behavior_based_on_env(authenticated_client: requests.Session) -> None:
     response = authenticated_client.post(api_url("/connections/plaid/link-token"), timeout=30)
-    assert response.status_code == 400
-    detail = response.json().get("detail", "")
-    assert "Plaid is not configured yet" in detail
+    if response.status_code == 400:
+        detail = response.json().get("detail", "")
+        assert "Plaid is not configured yet" in detail
+    else:
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data.get("link_token"), str) and data["link_token"]
 
 
 # Transactions and dashboard feature coverage

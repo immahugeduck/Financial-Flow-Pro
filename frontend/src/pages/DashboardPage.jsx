@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { WeeklyAdvisorCard } from "@/components/dashboard/WeeklyAdvisorCard";
 
 const metricCards = [
   { key: "total_balance", label: "Total Balance" },
@@ -49,6 +50,8 @@ export default function DashboardPage() {
           </article>
         ))}
       </section>
+
+      <WeeklyAdvisorCard />
 
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-3" data-testid="dashboard-chart-and-transactions-section">
         <article className="xl:col-span-2 rounded-lg border border-stone-200 bg-white p-6 shadow-sm" data-testid="dashboard-cashflow-chart-card">
