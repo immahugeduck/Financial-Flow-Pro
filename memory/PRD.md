@@ -53,6 +53,9 @@ Build a fully functional money management system where I can connect my banks an
 - Enhanced Plaid management UX with config status badge, linked institutions list, per-item sync, and unlink controls
 - Added Plaid sync resilience metadata (`transactions_pending`, `pending_reason`) and sync-item endpoint for targeted retries
 - Added automatic frontend polling retries when institution transactions are still preparing
+- Added dashboard AI Weekly Financial Health Score card with custom focus prompt, why-changed insights, and 3 action steps
+- Added advisor backend APIs for weekly score analysis (`/api/advisor/weekly-review`) and on-demand PDF export (`/api/advisor/weekly-review/pdf`)
+- Stabilized frontend runtime by removing duplicate Plaid SDK embedding conditions and chart sizing warnings during first render
 
 ## Prioritized Backlog
 ### P0 (Critical to complete fully live integrations)

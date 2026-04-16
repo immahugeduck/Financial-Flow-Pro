@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Line, LineChart, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { WeeklyAdvisorCard } from "@/components/dashboard/WeeklyAdvisorCard";
@@ -14,12 +14,25 @@ const metricCards = [
 
 export default function DashboardPage() {
   const [summary, setSummary] = useState(null);
+  const [chartWidth, setChartWidth] = useState(720);
 
   useEffect(() => {
     api
       .get("/dashboard/summary")
       .then((response) => setSummary(response.data))
       .catch(() => toast.error("Failed to load dashboard"));
+  }, []);
+
+  useEffect(() => {
+    const updateChartWidth = () => {
+      const width = window.innerWidth;
+      const computed = Math.max(300, Math.min(900, width - 140));
+      setChartWidth(computed);
+    };
+
+    updateChartWidth();
+    window.addEventListener("resize", updateChartWidth);
+    return () => window.removeEventListener("resize", updateChartWidth);
   }, []);
 
   const chartData = useMemo(() => summary?.monthly_cashflow || [], [summary]);
@@ -61,16 +74,14 @@ export default function DashboardPage() {
               Build report
             </Link>
           </div>
-          <div className="mt-5 h-72 w-full" data-testid="dashboard-cashflow-chart">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData}>
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip />
-                <Line dataKey="income" stroke="#4A6741" strokeWidth={3} />
-                <Line dataKey="expenses" stroke="#C75D40" strokeWidth={3} />
-              </LineChart>
-            </ResponsiveContainer>
+          <div className="custom-scrollbar mt-5 overflow-x-auto" data-testid="dashboard-cashflow-chart">
+            <LineChart data={chartData} width={chartWidth} height={280}>
+              <XAxis dataKey="month" />
+              <YAxis />
+              <Tooltip />
+              <Line dataKey="income" stroke="#4A6741" strokeWidth={3} />
+              <Line dataKey="expenses" stroke="#C75D40" strokeWidth={3} />
+            </LineChart>
           </div>
         </article>
 
