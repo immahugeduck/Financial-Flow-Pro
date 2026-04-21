@@ -8,13 +8,13 @@ import {
 } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBnhF1RlPl8lMKsvtS7M7SEGJwvRDzNPWA",
-  authDomain: "financial-flow-3cbb2.firebaseapp.com",
-  projectId: "financial-flow-3cbb2",
-  storageBucket: "financial-flow-3cbb2.firebasestorage.app",
-  messagingSenderId: "446980586056",
-  appId: "1:446980586056:web:3b2ffe4c25ecd5467f367d",
-  measurementId: "G-9SQ1LNC28T",
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
+  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID,
 };
 
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
