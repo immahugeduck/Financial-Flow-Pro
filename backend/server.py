@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
 import io
 import logging
@@ -37,7 +38,34 @@ gemini_model = os.environ.get("GEMINI_MODEL")
 # Services
 client = AsyncIOMotorClient(mongo_url)
 db = client[db_name]
-app = FastAPI(title="Financial Flow API")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    demo_email = "demo@aurafinance.app"
+    existing = await db.users.find_one({"email": demo_email}, {"_id": 0})
+    if not existing:
+        demo_user = {
+            "id": str(uuid.uuid4()),
+            "email": demo_email,
+            "full_name": "Financial Flow Demo",
+            "password_hash": password_context.hash("Demo123!"),
+            "google_id": None,
+            "created_at": now_iso(),
+            "updated_at": now_iso(),
+        }
+        await db.users.insert_one(dict(demo_user))
+        logger.info("Seeded demo account: %s", demo_email)
+    elif existing.get("full_name") in {"Demo User", "Financial Flow Demo User"}:
+        await db.users.update_one(
+            {"id": existing["id"]},
+            {"$set": {"full_name": "Financial Flow Demo", "updated_at": now_iso()}},
+        )
+    yield
+    client.close()
+
+
+app = FastAPI(title="Financial Flow API", lifespan=lifespan)
 api_router = APIRouter(prefix="/api")
 security = HTTPBearer()
 password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -1525,34 +1553,6 @@ async def download_report_pdf(
 @api_router.post("/webhooks/plaid")
 async def plaid_webhook() -> dict[str, str]:
     return {"status": "received"}
-
-
-@app.on_event("startup")
-async def startup_seed_demo() -> None:
-    demo_email = "demo@aurafinance.app"
-    existing = await db.users.find_one({"email": demo_email}, {"_id": 0})
-    if not existing:
-        demo_user = {
-            "id": str(uuid.uuid4()),
-            "email": demo_email,
-            "full_name": "Financial Flow Demo",
-            "password_hash": password_context.hash("Demo123!"),
-            "google_id": None,
-            "created_at": now_iso(),
-            "updated_at": now_iso(),
-        }
-        await db.users.insert_one(dict(demo_user))
-        logger.info("Seeded demo account: %s", demo_email)
-    elif existing.get("full_name") in {"Demo User", "Financial Flow Demo User"}:
-        await db.users.update_one(
-            {"id": existing["id"]},
-            {"$set": {"full_name": "Financial Flow Demo", "updated_at": now_iso()}},
-        )
-
-
-@app.on_event("shutdown")
-async def shutdown_db_client() -> None:
-    client.close()
 
 
 app.include_router(api_router)
