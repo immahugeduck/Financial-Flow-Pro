@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 
@@ -19,22 +19,20 @@ export default function ReportsPage() {
   const [selectedReport, setSelectedReport] = useState(null);
   const [generating, setGenerating] = useState(false);
 
-  const loadReports = async () => {
+  const loadReports = useCallback(async () => {
     try {
       const response = await api.get("/reports");
       const all = response.data.reports || [];
       setReports(all);
-      if (all.length && !selectedReport) {
-        setSelectedReport(all[0]);
-      }
+      setSelectedReport((prev) => prev ?? (all[0] || null));
     } catch {
       toast.error("Failed to load reports");
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadReports();
-  }, []);
+  }, [loadReports]);
 
   const generateReport = async (event) => {
     event.preventDefault();
