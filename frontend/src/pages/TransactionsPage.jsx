@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 
@@ -22,15 +22,16 @@ const defaultForm = {
 };
 
 export default function TransactionsPage() {
-  const [filters, setFilters] = useState(defaultFilters);
+  const [filterInputs, setFilterInputs] = useState(defaultFilters);
+  const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
   const [formData, setFormData] = useState(defaultForm);
   const [transactions, setTransactions] = useState([]);
   const [accounts, setAccounts] = useState([]);
 
-  const loadPageData = async () => {
+  const loadPageData = useCallback(async () => {
     try {
       const [transactionsResponse, accountsResponse] = await Promise.all([
-        api.get("/transactions", { params: { ...filters, limit: 100, page: 1 } }),
+        api.get("/transactions", { params: { ...appliedFilters, limit: 100, page: 1 } }),
         api.get("/connections/accounts"),
       ]);
       setTransactions(transactionsResponse.data.transactions || []);
@@ -38,11 +39,11 @@ export default function TransactionsPage() {
     } catch {
       toast.error("Failed to load transactions");
     }
-  };
+  }, [appliedFilters]);
 
   useEffect(() => {
     loadPageData();
-  }, []);
+  }, [loadPageData]);
 
   const submitTransaction = async (event) => {
     event.preventDefault();
@@ -156,31 +157,31 @@ export default function TransactionsPage() {
           <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
             <input
               placeholder="Search description"
-              value={filters.search}
+              value={filterInputs.search}
               data-testid="transaction-filter-search-input"
               className="rounded-md border border-stone-200 px-3 py-2"
-              onChange={(event) => setFilters((prev) => ({ ...prev, search: event.target.value }))}
+              onChange={(event) => setFilterInputs((prev) => ({ ...prev, search: event.target.value }))}
             />
             <input
               placeholder="Category"
-              value={filters.category}
+              value={filterInputs.category}
               data-testid="transaction-filter-category-input"
               className="rounded-md border border-stone-200 px-3 py-2"
-              onChange={(event) => setFilters((prev) => ({ ...prev, category: event.target.value }))}
+              onChange={(event) => setFilterInputs((prev) => ({ ...prev, category: event.target.value }))}
             />
             <input
               type="date"
-              value={filters.start_date}
+              value={filterInputs.start_date}
               data-testid="transaction-filter-start-date-input"
               className="rounded-md border border-stone-200 px-3 py-2"
-              onChange={(event) => setFilters((prev) => ({ ...prev, start_date: event.target.value }))}
+              onChange={(event) => setFilterInputs((prev) => ({ ...prev, start_date: event.target.value }))}
             />
             <input
               type="date"
-              value={filters.end_date}
+              value={filterInputs.end_date}
               data-testid="transaction-filter-end-date-input"
               className="rounded-md border border-stone-200 px-3 py-2"
-              onChange={(event) => setFilters((prev) => ({ ...prev, end_date: event.target.value }))}
+              onChange={(event) => setFilterInputs((prev) => ({ ...prev, end_date: event.target.value }))}
             />
           </div>
           <div className="mt-4 grid grid-cols-2 gap-2">
@@ -188,7 +189,7 @@ export default function TransactionsPage() {
               type="button"
               data-testid="transaction-apply-filters-button"
               className="rounded-lg bg-[#4A6741] px-4 py-2 text-sm font-medium text-white"
-              onClick={loadPageData}
+              onClick={() => setAppliedFilters(filterInputs)}
             >
               Apply filters
             </button>
@@ -197,8 +198,8 @@ export default function TransactionsPage() {
               data-testid="transaction-reset-filters-button"
               className="rounded-lg border border-stone-200 px-4 py-2 text-sm font-medium"
               onClick={() => {
-                setFilters(defaultFilters);
-                setTimeout(loadPageData, 0);
+                setFilterInputs(defaultFilters);
+                setAppliedFilters(defaultFilters);
               }}
             >
               Reset
