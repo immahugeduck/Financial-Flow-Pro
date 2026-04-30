@@ -17,6 +17,18 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+      window.location.href = "/login";
+    }
+    return Promise.reject(error);
+  },
+);
+
 export const authStorage = {
   getToken: () => localStorage.getItem(TOKEN_KEY),
   getUser: () => {

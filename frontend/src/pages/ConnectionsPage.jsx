@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { PlaidConnectButton } from "@/components/providers/PlaidConnectButton";
@@ -31,7 +31,7 @@ export default function ConnectionsPage() {
   const [syncingItems, setSyncingItems] = useState({});
   const [formData, setFormData] = useState(initialForm);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       const [providersResponse, accountsResponse, plaidItemsResponse] = await Promise.all([
         api.get("/connections/providers"),
@@ -45,11 +45,11 @@ export default function ConnectionsPage() {
     } catch {
       toast.error("Failed to load account connections");
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   const addManualConnection = async (event) => {
     event.preventDefault();

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { api, authStorage } from "@/lib/api";
 
@@ -8,13 +8,6 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(authStorage.getUser());
   const [loading, setLoading] = useState(true);
 
-  const completeTokenLogin = async (token) => {
-    authStorage.setSession(token, authStorage.getUser() || {});
-    const response = await api.get("/auth/me");
-    authStorage.setSession(token, response.data);
-    setUser(response.data);
-  };
-
   useEffect(() => {
     const bootstrap = async () => {
       const token = authStorage.getToken();
@@ -22,7 +15,6 @@ export const AuthProvider = ({ children }) => {
         setLoading(false);
         return;
       }
-
       try {
         const response = await api.get("/auth/me");
         authStorage.setSession(token, response.data);
@@ -34,36 +26,42 @@ export const AuthProvider = ({ children }) => {
         setLoading(false);
       }
     };
-
     bootstrap();
   }, []);
 
-  const register = async (payload) => {
+  const completeTokenLogin = useCallback(async (token) => {
+    authStorage.setSession(token, authStorage.getUser() || {});
+    const response = await api.get("/auth/me");
+    authStorage.setSession(token, response.data);
+    setUser(response.data);
+  }, []);
+
+  const register = useCallback(async (payload) => {
     const response = await api.post("/auth/register", payload);
     authStorage.setSession(response.data.token, response.data.user);
     setUser(response.data.user);
     toast.success("Account created successfully");
-  };
+  }, []);
 
-  const login = async (payload) => {
+  const login = useCallback(async (payload) => {
     const response = await api.post("/auth/login", payload);
     authStorage.setSession(response.data.token, response.data.user);
     setUser(response.data.user);
     toast.success("Welcome back");
-  };
+  }, []);
 
-  const googleLogin = async (payload) => {
+  const googleLogin = useCallback(async (payload) => {
     const response = await api.post("/auth/google-login", payload);
     authStorage.setSession(response.data.token, response.data.user);
     setUser(response.data.user);
     toast.success("Signed in with Google");
-  };
+  }, []);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     authStorage.clearSession();
     setUser(null);
     toast.success("Logged out");
-  };
+  }, []);
 
   const value = useMemo(
     () => ({
@@ -76,7 +74,7 @@ export const AuthProvider = ({ children }) => {
       completeTokenLogin,
       isAuthenticated: Boolean(user),
     }),
-    [user, loading],
+    [user, loading, register, login, googleLogin, logout, completeTokenLogin],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

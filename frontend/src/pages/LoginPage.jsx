@@ -107,6 +107,8 @@ export default function LoginPage() {
         } catch (redirectError) {
           toast.error(redirectError?.message || "Google redirect sign-in failed");
         }
+      } else if (error?.code === "auth/unauthorized-domain") {
+        toast.error("This domain isn't authorized in Firebase yet. Add it under Firebase Console → Authentication → Settings → Authorized Domains.");
       } else {
         toast.error(error?.response?.data?.detail || error?.message || "Google sign-in failed");
       }
