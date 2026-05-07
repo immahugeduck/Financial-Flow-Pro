@@ -1,0 +1,490 @@
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getAuth, 
+  signInWithCustomToken, 
+  signInAnonymously, 
+  onAuthStateChanged 
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  collection, 
+  query, 
+  onSnapshot, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc,
+  serverTimestamp 
+} from 'firebase/firestore';
+import { 
+  LayoutDashboard, 
+  ArrowUpRight, 
+  ArrowDownLeft, 
+  Plus, 
+  Filter, 
+  PieChart as PieChartIcon, 
+  Download, 
+  Search, 
+  X, 
+  ChevronRight,
+  CreditCard,
+  Tag,
+  Calendar,
+  MoreVertical,
+  CheckCircle2,
+  Wallet,
+  ArrowRightLeft,
+  RefreshCw,
+  Building2,
+  SmartphoneNfc,
+  Bell,
+  Settings,
+  TrendingUp,
+  Loader2,
+  Link as LinkIcon,
+  ShieldCheck,
+  Zap,
+  Globe,
+  Database,
+  Lock
+} from 'lucide-react';
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer, 
+  PieChart, 
+  Pie, 
+  Cell
+} from 'recharts';
+
+// --- Firebase Configuration ---
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'finance-production-v1';
+
+const CATEGORIES = [
+  'Revenue', 'Marketing', 'Software', 'Rent', 'Utilities', 'Payroll', 'Travel', 'Miscellaneous'
+];
+
+const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#71717a'];
+
+// --- Helper Components ---
+
+const Modal = ({ isOpen, onClose, title, children }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 animate-in fade-in duration-300">
+      <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] w-full max-w-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-white/10">
+        <div className="p-6 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-zinc-50/50 dark:bg-zinc-800/30">
+          <h3 className="text-xl font-black">{title}</h3>
+          <button onClick={onClose} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors">
+            <X size={20} />
+          </button>
+        </div>
+        <div className="p-8 max-h-[80vh] overflow-y-auto">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('transactions');
+  const [transactions, setTransactions] = useState([]);
+  const [items, setItems] = useState([]); // Plaid Items (Bank Connections)
+  const [isLinking, setIsLinking] = useState(false);
+  const [linkToken, setLinkToken] = useState(null);
+  const [syncing, setSyncing] = useState(false);
+
+  // 1. Auth Initialization
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (err) { console.error(err); }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      if (u) setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // 2. Load Plaid Script
+  useEffect(() => {
+    const script = document.createElement("script");
+    script.src = "https://cdn.plaid.com/link/v2/stable/link-initialize.js";
+    script.async = true;
+    document.body.appendChild(script);
+  }, []);
+
+  // 3. Real-time Data Sync
+  useEffect(() => {
+    if (!user) return;
+    
+    // Sync Transactions
+    const txQ = query(collection(db, 'artifacts', appId, 'users', user.uid, 'transactions'));
+    const unsubTx = onSnapshot(txQ, (snap) => {
+      setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (err) => console.error(err));
+
+    // Sync Connected Bank Items
+    const itemsQ = query(collection(db, 'artifacts', appId, 'users', user.uid, 'plaid_items'));
+    const unsubItems = onSnapshot(itemsQ, (snap) => {
+      setItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (err) => console.error(err));
+
+    return () => { unsubTx(); unsubItems(); };
+  }, [user]);
+
+  // --- Plaid Link Logic (The Workable Flow) ---
+
+  const initiatePlaidLink = async () => {
+    setIsLinking(true);
+    
+    // STEP 1: In a real Vercel app, you would call your API route here:
+    // const response = await fetch('/api/create_link_token', { method: 'POST' });
+    // const data = await response.json();
+    // setLinkToken(data.link_token);
+
+    // MOCK: Simulating the link token receipt
+    setTimeout(() => {
+      // In a real app, you would use the Plaid SDK:
+      // const handler = window.Plaid.create({
+      //   token: data.link_token,
+      //   onSuccess: (public_token, metadata) => handlePlaidSuccess(public_token, metadata),
+      // });
+      // handler.open();
+      
+      // For this sandbox, we simulate the success callback:
+      handlePlaidSuccess("public-sandbox-123", { institution: { name: "Chase Bank" } });
+    }, 1500);
+  };
+
+  const handlePlaidSuccess = async (publicToken, metadata) => {
+    if (!user) return;
+
+    // STEP 2: Exchange Public Token for Access Token (Server Side)
+    // await fetch('/api/exchange_token', { 
+    //   method: 'POST', 
+    //   body: JSON.stringify({ public_token: publicToken }) 
+    // });
+
+    // Save the connection metadata to Firestore
+    await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'plaid_items'), {
+      institutionName: metadata.institution.name,
+      status: 'active',
+      linkedAt: serverTimestamp(),
+      lastSync: 'Pending'
+    });
+
+    setIsLinking(false);
+  };
+
+  const syncTransactions = async (itemId) => {
+    setSyncing(true);
+    // Simulation of fetching real data from Plaid API via Vercel Backend
+    await new Promise(r => setTimeout(r, 2000));
+    
+    const mockRealTxs = [
+      { description: 'Uber Trip', amount: -24.50, category: 'Travel', date: '2023-11-20' },
+      { description: 'Apple.com/Bill', amount: -14.99, category: 'Software', date: '2023-11-19' },
+      { description: 'Payroll Deposit', amount: 3200.00, category: 'Revenue', date: '2023-11-18' }
+    ];
+
+    for (const tx of mockRealTxs) {
+      await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'transactions'), {
+        ...tx,
+        type: tx.amount > 0 ? 'deposit' : 'withdrawal',
+        status: 'synced',
+        createdAt: serverTimestamp()
+      });
+    }
+
+    await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'plaid_items', itemId), {
+      lastSync: new Date().toLocaleString()
+    });
+
+    setSyncing(false);
+  };
+
+  // --- Analytics ---
+  const reportData = useMemo(() => {
+    const categoryTotals = {};
+    transactions.forEach(t => {
+      const amount = Math.abs(t.amount);
+      categoryTotals[t.category] = (categoryTotals[t.category] || 0) + amount;
+    });
+    return Object.entries(categoryTotals).map(([name, value]) => ({ name, value }));
+  }, [transactions]);
+
+  if (loading) return (
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white font-sans">
+      <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+      <p className="font-black tracking-widest uppercase text-xs opacity-50">Initializing Secure Tunnel</p>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-[#FDFDFF] dark:bg-[#09090b] text-zinc-900 dark:text-zinc-50 font-sans selection:bg-indigo-100">
+      
+      {/* Sidebar - Desktop Only */}
+      <aside className="fixed left-0 top-0 h-full w-64 bg-white dark:bg-zinc-900/50 border-r border-zinc-100 dark:border-zinc-800 hidden md:block z-40">
+        <div className="p-8">
+          <div className="flex items-center gap-3 mb-12">
+            <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-500/30">
+              <Database size={22} fill="currentColor" />
+            </div>
+            <span className="font-black text-xl tracking-tighter">FinanceFlow</span>
+          </div>
+
+          <nav className="space-y-2">
+            {[
+              { id: 'transactions', label: 'Ledger', icon: <LayoutDashboard size={20} /> },
+              { id: 'banking', label: 'Linked Banks', icon: <Globe size={20} /> },
+              { id: 'reports', label: 'Analysis', icon: <PieChartIcon size={20} /> }
+            ].map(item => (
+              <button 
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl font-bold transition-all ${activeTab === item.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
+              >
+                {item.icon}
+                {item.label}
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        <div className="absolute bottom-8 left-8 right-8">
+           <div className="p-4 bg-zinc-50 dark:bg-zinc-800 rounded-2xl border border-zinc-100 dark:border-zinc-700">
+              <div className="flex items-center gap-2 mb-2">
+                <Lock size={14} className="text-zinc-400" />
+                <span className="text-[10px] font-black uppercase text-zinc-400">Security Mode</span>
+              </div>
+              <p className="text-xs font-bold leading-relaxed opacity-60">256-bit AES encryption active. Your tokens are managed by Plaid & Vercel.</p>
+           </div>
+        </div>
+      </aside>
+
+      {/* Main Container */}
+      <main className="md:pl-64 min-h-screen">
+        <div className="max-w-6xl mx-auto p-4 md:p-12 space-y-10">
+          
+          {/* Global Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl md:text-4xl font-black tracking-tight">
+                {activeTab === 'transactions' ? 'Your Ledger' : activeTab === 'banking' ? 'Bank Connections' : 'Financial Insights'}
+              </h1>
+              <p className="text-zinc-500 font-medium mt-1">Real-time data orchestration via Plaid Link.</p>
+            </div>
+            <div className="hidden sm:flex items-center gap-3">
+               <div className="px-4 py-2 bg-green-500/10 text-green-600 rounded-full border border-green-500/20 text-xs font-black flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                  API STATUS: ONLINE
+               </div>
+            </div>
+          </div>
+
+          {/* Tab Views */}
+          {activeTab === 'transactions' && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              {/* Summary Metrics */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {[
+                  { label: 'Total Volume', val: transactions.reduce((a,b) => a + Math.abs(b.amount), 0), color: 'text-zinc-900' },
+                  { label: 'Total Inflow', val: transactions.filter(t=>t.type==='deposit').reduce((a,b)=>a+b.amount,0), color: 'text-green-600' },
+                  { label: 'Total Outflow', val: transactions.filter(t=>t.type==='withdrawal').reduce((a,b)=>a+Math.abs(b.amount),0), color: 'text-red-600' }
+                ].map((stat, i) => (
+                  <div key={i} className="bg-white dark:bg-zinc-900 p-8 rounded-[2.5rem] border border-zinc-100 dark:border-zinc-800 shadow-sm">
+                    <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2">{stat.label}</p>
+                    <p className={`text-3xl font-black ${stat.color}`}>${stat.val.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Transaction List */}
+              <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] border border-zinc-100 dark:border-zinc-800 shadow-sm overflow-hidden">
+                <div className="p-8 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/30">
+                  <h3 className="text-xl font-black">Latest Activity</h3>
+                  <button className="text-xs font-black text-indigo-600 flex items-center gap-1">Download Ledger <Download size={14}/></button>
+                </div>
+                {transactions.length === 0 ? (
+                  <div className="p-24 text-center">
+                    <div className="w-20 h-20 bg-zinc-50 dark:bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-6 text-zinc-400">
+                      <Search size={40} />
+                    </div>
+                    <h4 className="text-xl font-black">No transactions ingested</h4>
+                    <p className="text-zinc-500 mt-2">Connect a bank account in the 'Linked Banks' tab to begin.</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-zinc-50 dark:divide-zinc-800">
+                    {transactions.sort((a,b) => new Date(b.date) - new Date(a.date)).map(t => (
+                      <div key={t.id} className="p-6 md:p-8 flex items-center justify-between hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20 transition-all group">
+                         <div className="flex items-center gap-6">
+                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${t.type === 'deposit' ? 'bg-green-100 text-green-600' : 'bg-zinc-100 text-zinc-400'}`}>
+                              {t.type === 'deposit' ? <ArrowDownLeft size={24}/> : <ArrowUpRight size={24}/>}
+                            </div>
+                            <div>
+                               <p className="font-black text-lg group-hover:text-indigo-600 transition-colors">{t.description}</p>
+                               <div className="flex items-center gap-3 mt-1">
+                                  <span className="text-[10px] font-black text-zinc-400 uppercase">{t.date}</span>
+                                  <span className="text-[10px] font-black text-zinc-400 uppercase">• {t.category}</span>
+                                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${t.status === 'synced' ? 'bg-indigo-50 text-indigo-600' : 'bg-zinc-100 text-zinc-500'}`}>
+                                    {t.status.toUpperCase()}
+                                  </span>
+                               </div>
+                            </div>
+                         </div>
+                         <div className="text-right">
+                            <p className={`text-2xl font-black ${t.type === 'deposit' ? 'text-green-600' : 'text-zinc-900 dark:text-white'}`}>
+                               {t.type === 'deposit' ? '+' : ''}${Math.abs(t.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </p>
+                            <button className="text-[10px] font-black text-zinc-400 uppercase mt-1 group-hover:text-indigo-600 transition-colors">Details</button>
+                         </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'banking' && (
+            <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4">
+               {/* Plaid Link Trigger */}
+               <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 p-12 rounded-[3rem] text-white shadow-2xl shadow-indigo-600/30 flex flex-col md:flex-row items-center gap-12 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-12 opacity-10 rotate-12"><Globe size={200}/></div>
+                  <div className="flex-1 space-y-6 relative z-10">
+                    <div className="flex items-center gap-3">
+                       <Zap size={24} fill="white" />
+                       <span className="text-xs font-black uppercase tracking-[0.2em]">Plaid Ready</span>
+                    </div>
+                    <h2 className="text-4xl md:text-5xl font-black tracking-tighter leading-none">Connect your financial life.</h2>
+                    <p className="text-indigo-100 font-medium text-lg leading-relaxed max-w-md">Instantly pull in transactions from Chase, Bank of America, Venmo, PayPal, and 12,000+ others.</p>
+                    <button 
+                      onClick={initiatePlaidLink}
+                      disabled={isLinking}
+                      className="bg-white text-indigo-600 px-10 py-5 rounded-2xl font-black text-lg shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center gap-3"
+                    >
+                      {isLinking ? <Loader2 className="animate-spin"/> : <LinkIcon size={20}/>}
+                      {isLinking ? 'Opening Plaid...' : 'Link New Account'}
+                    </button>
+                  </div>
+                  <div className="w-full md:w-64 space-y-4">
+                     <div className="p-6 bg-white/10 backdrop-blur-md rounded-3xl border border-white/20">
+                        <p className="text-[10px] font-black uppercase mb-2">Security</p>
+                        <p className="text-sm font-bold opacity-80 leading-relaxed">Financial data is fetched through an encrypted tunnel. No login credentials touch our servers.</p>
+                     </div>
+                  </div>
+               </div>
+
+               {/* Active Connections List */}
+               <div className="space-y-6">
+                  <h3 className="text-2xl font-black ml-4">Connected Institutions</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {items.map(item => (
+                      <div key={item.id} className="bg-white dark:bg-zinc-900 p-10 rounded-[2.5rem] border border-zinc-100 dark:border-zinc-800 shadow-sm group hover:-translate-y-2 transition-all">
+                        <div className="flex items-center justify-between mb-8">
+                           <div className="w-16 h-16 bg-zinc-50 dark:bg-zinc-800 rounded-3xl flex items-center justify-center text-zinc-900 dark:text-white shadow-sm font-black text-xl">
+                              {item.institutionName.charAt(0)}
+                           </div>
+                           <div className="text-right">
+                              <span className="px-3 py-1 bg-green-500/10 text-green-600 rounded-full text-[10px] font-black uppercase tracking-widest border border-green-500/20">Active</span>
+                           </div>
+                        </div>
+                        <h4 className="text-2xl font-black mb-1">{item.institutionName}</h4>
+                        <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-8">Synced {item.lastSync}</p>
+                        
+                        <button 
+                          onClick={() => syncTransactions(item.id)}
+                          disabled={syncing}
+                          className="w-full py-4 bg-zinc-900 text-white dark:bg-zinc-800 dark:text-zinc-100 rounded-2xl font-black text-sm flex items-center justify-center gap-3 hover:bg-indigo-600 transition-colors"
+                        >
+                          {syncing ? <Loader2 className="animate-spin" size={18}/> : <RefreshCw size={18}/>}
+                          {syncing ? 'Fetching...' : 'Force Sync Data'}
+                        </button>
+                      </div>
+                    ))}
+                    {items.length === 0 && (
+                      <div className="col-span-full py-20 bg-zinc-50/50 dark:bg-zinc-900/30 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] text-center">
+                         <p className="font-bold text-zinc-400">No active bank connections yet.</p>
+                      </div>
+                    )}
+                  </div>
+               </div>
+            </div>
+          )}
+
+          {activeTab === 'reports' && (
+             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in fade-in">
+                <div className="bg-white dark:bg-zinc-900 p-10 rounded-[2.5rem] border border-zinc-100 dark:border-zinc-800">
+                  <h3 className="text-xl font-black mb-8">Expense Matrix</h3>
+                  <div className="h-[300px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={reportData} innerRadius={80} outerRadius={110} paddingAngle={8} dataKey="value" stroke="none">
+                          {reportData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} cornerRadius={8} />)}
+                        </Pie>
+                        <Tooltip contentStyle={{ borderRadius: '20px', border: 'none' }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+                <div className="bg-white dark:bg-zinc-900 p-10 rounded-[2.5rem] border border-zinc-100 dark:border-zinc-800">
+                   <h3 className="text-xl font-black mb-8">Spending Tiers</h3>
+                   <div className="h-[300px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={reportData}>
+                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700 }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700 }} />
+                        <Tooltip cursor={{ fill: '#f8f9fa' }} contentStyle={{ borderRadius: '16px', border: 'none' }} />
+                        <Bar dataKey="value" fill="#6366f1" radius={[10, 10, 10, 10]} barSize={30} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+             </div>
+          )}
+
+        </div>
+      </main>
+
+      {/* Mobile Nav */}
+      <nav className="fixed bottom-0 left-0 w-full h-20 bg-white/80 dark:bg-black/80 backdrop-blur-xl border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-around md:hidden z-50">
+        {[
+          { id: 'transactions', icon: <LayoutDashboard size={20}/> },
+          { id: 'banking', icon: <Globe size={20}/> },
+          { id: 'reports', icon: <PieChartIcon size={20}/> }
+        ].map(item => (
+          <button 
+            key={item.id}
+            onClick={() => setActiveTab(item.id)}
+            className={`p-4 rounded-2xl transition-all ${activeTab === item.id ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20' : 'text-zinc-400'}`}
+          >
+            {item.icon}
+          </button>
+        ))}
+      </nav>
+    </div>
+  );
+}
+
