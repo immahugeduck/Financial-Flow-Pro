@@ -1,0 +1,31 @@
+.grain-bg {
+  background-image:
+    radial-gradient(circle at 10% 20%, rgba(74, 103, 65, 0.1), transparent 30%),
+    radial-gradient(circle at 90% 0%, rgba(199, 93, 64, 0.08), transparent 30%),
+    radial-gradient(circle at 70% 70%, rgba(230, 220, 202, 0.35), transparent 35%);
+}
+
+.fade-up {
+  animation: fade-up 0.5s ease both;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #d6d3d1;
+  border-radius: 9999px;
+}
