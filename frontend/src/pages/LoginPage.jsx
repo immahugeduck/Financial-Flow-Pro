@@ -2,11 +2,9 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
-import {
-  resolveGoogleRedirectResult,
-  signInWithGooglePopup,
-  signInWithGoogleRedirect,
-} from "@/lib/firebase";
+import { resolveGoogleRedirectResult } from "@/lib/firebase";
+
+const GOOGLE_REDIRECT_FLAG = "google-redirect-pending";
 
 const heroImage =
   "https://static.prod-images.emergentagent.com/jobs/522d1ae5-e3a1-4a99-90c4-276bd1db41d5/images/3067d5d0c23655b3bd7934e2b86bf899036a2fd224dc234b027724f3ae1d11e2.png";
@@ -16,7 +14,6 @@ export default function LoginPage() {
   const { login, register, googleLogin, isAuthenticated } = useAuth();
   const [mode, setMode] = useState("login");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     full_name: "",
     email: "",
@@ -30,6 +27,10 @@ export default function LoginPage() {
   }, [isAuthenticated, navigate]);
 
   useEffect(() => {
+    if (!sessionStorage.getItem(GOOGLE_REDIRECT_FLAG)) {
+      return;
+    }
+
     let mounted = true;
 
     const consumeRedirectResult = async () => {
@@ -40,6 +41,7 @@ export default function LoginPage() {
           return;
         }
 
+        sessionStorage.removeItem(GOOGLE_REDIRECT_FLAG);
         await googleLogin({
           email: googleUser.email,
           full_name: googleUser.displayName || "Google User",
@@ -47,6 +49,7 @@ export default function LoginPage() {
         });
         navigate("/dashboard");
       } catch (error) {
+        sessionStorage.removeItem(GOOGLE_REDIRECT_FLAG);
         if (mounted) {
           toast.error(error?.message || "Google redirect sign-in failed");
         }
@@ -76,45 +79,10 @@ export default function LoginPage() {
     }
   };
 
-  const handleGoogleSignIn = async () => {
-    try {
-      setIsGoogleSubmitting(true);
-      const result = await signInWithGooglePopup();
-      const googleUser = result.user;
-      if (!googleUser?.email || !googleUser?.uid) {
-        throw new Error("Google profile missing required fields");
-      }
-
-      await googleLogin({
-        email: googleUser.email,
-        full_name: googleUser.displayName || "Google User",
-        google_id: googleUser.uid,
-      });
-      navigate("/dashboard");
-    } catch (error) {
-      const code = error?.code || "";
-      const shouldFallbackToRedirect = [
-        "auth/popup-blocked",
-        "auth/popup-closed-by-user",
-        "auth/cancelled-popup-request",
-      ].includes(code);
-
-      if (shouldFallbackToRedirect) {
-        toast.info("Switching to secure redirect sign-in…");
-        try {
-          await signInWithGoogleRedirect();
-          return;
-        } catch (redirectError) {
-          toast.error(redirectError?.message || "Google redirect sign-in failed");
-        }
-      } else if (error?.code === "auth/unauthorized-domain") {
-        toast.error("This domain isn't authorized in Firebase yet. Add it under Firebase Console → Authentication → Settings → Authorized Domains.");
-      } else {
-        toast.error(error?.response?.data?.detail || error?.message || "Google sign-in failed");
-      }
-    } finally {
-      setIsGoogleSubmitting(false);
-    }
+  const handleGoogleSignIn = () => {
+    const backendUrl = process.env.REACT_APP_BACKEND_URL || "";
+    sessionStorage.setItem(GOOGLE_REDIRECT_FLAG, "1");
+    window.location.href = `${backendUrl}/api/auth/google/start`;
   };
 
   return (
@@ -222,14 +190,13 @@ export default function LoginPage() {
             <button
               type="button"
               data-testid="google-oauth-start-button"
-              disabled={isGoogleSubmitting}
               className="w-full rounded-lg border border-stone-200 bg-white px-5 py-3 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-50"
               onClick={handleGoogleSignIn}
             >
-              {isGoogleSubmitting ? "Connecting Google…" : "Continue with Google"}
+              Continue with Google
             </button>
             <p className="mt-2 text-center text-xs text-stone-500" data-testid="google-oauth-status-text">
-              Google popup login is active for Financial Flow.
+              Google sign-in is active for Financial Flow.
             </p>
           </div>
         </div>
